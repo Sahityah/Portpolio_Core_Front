@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import api from "@/lib/api";
+import {jwtDecode} from "jwt-decode";
 
 export type User = {
   id: string;
@@ -12,6 +13,7 @@ export type User = {
 
 interface AuthState {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
@@ -26,6 +28,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
+      token: null,
       isAuthenticated: false,
       isLoading: false,
 
@@ -36,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
           if (email === "test@example.com" && password === "123456") {
             set({
               user: { id: "1", name: "Demo User", email, avatar: null },
+              token: "mock-token",
               isAuthenticated: true,
               isLoading: false,
             });
@@ -44,7 +48,12 @@ export const useAuthStore = create<AuthState>()(
 
           // API login
           const { data } = await api.post("/api/auth/login", { email, password });
-          set({ user: data.user, isAuthenticated: true, isLoading: false });
+          set({
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
         } catch (error) {
           const message = (error as any).response?.data?.message || error.message || "Login failed";
           set({ isLoading: false });
@@ -59,15 +68,21 @@ export const useAuthStore = create<AuthState>()(
           if (credential === "mock-google-credential") {
             set({
               user: { id: "1", name: "Google User", email: "googleuser@example.com", avatar: null },
+              token: "mock-token",
               isAuthenticated: true,
               isLoading: false,
             });
             return;
           }
 
-          // API login
+          // API Google login
           const { data } = await api.post("/api/auth/google-login", { credential });
-          set({ user: data.user, isAuthenticated: true, isLoading: false });
+          set({
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
         } catch (error) {
           const message = (error as any).response?.data?.message || error.message || "Google login failed";
           set({ isLoading: false });
@@ -79,7 +94,12 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           const { data } = await api.post("/api/auth/register", { name, email, password });
-          set({ user: data.user, isAuthenticated: true, isLoading: false });
+          set({
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
         } catch (error) {
           const message = (error as any).response?.data?.message || error.message || "Registration failed";
           set({ isLoading: false });
@@ -88,7 +108,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        set({ user: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false });
+        localStorage.removeItem("auth-store"); // clear persisted storage
       },
 
       updateProfile: async (userData) => {
@@ -107,6 +128,7 @@ export const useAuthStore = create<AuthState>()(
       name: "auth-store",
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
     }
