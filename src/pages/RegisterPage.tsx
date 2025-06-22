@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Card, CardContent, CardHeader, CardFooter, CardTitle, CardDescription,
@@ -10,14 +10,17 @@ import { Eye, EyeOff, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/store/auth-store";
 
-const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
+const initialFormState = {
+  name: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+};
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.(com|in|net|org)$/i;
+
+const RegisterPage: React.FC = () => {
+  const [formData, setFormData] = useState(initialFormState);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -26,9 +29,12 @@ const RegisterPage: React.FC = () => {
   const { toast } = useToast();
   const registerUser = useAuthStore((state) => state.register);
 
+  useEffect(() => {
+    document.title = "Register - Portfolio Manager";
+  }, []);
+
   const validate = () => {
     const newErrors: typeof errors = {};
-    const emailRegex = /^[^\s@]+@[^\s@]+\.(com|in|net|org)$/i;
 
     if (!formData.name.trim()) newErrors.name = "Full name is required";
     if (!formData.email) newErrors.email = "Email is required";
@@ -82,51 +88,24 @@ const RegisterPage: React.FC = () => {
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} onKeyDown={(e) => isLoading && e.key === "Enter" && e.preventDefault()} className="space-y-4">
             <div>
               <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                name="name"
-                type="text"
-                value={formData.name}
-                onChange={handleChange}
-                disabled={isLoading}
-              />
+              <Input id="name" name="name" type="text" value={formData.name} onChange={handleChange} disabled={isLoading} />
               {errors.name && <p className="text-red-500 text-xs">{errors.name}</p>}
             </div>
 
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                disabled={isLoading}
-              />
+              <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} disabled={isLoading} />
               {errors.email && <p className="text-red-500 text-xs">{errors.email}</p>}
             </div>
 
             <div>
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  value={formData.password}
-                  onChange={handleChange}
-                  disabled={isLoading}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
+                <Input id="password" name="password" type={showPassword ? "text" : "password"} value={formData.password} onChange={handleChange} disabled={isLoading} />
+                <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
@@ -135,14 +114,7 @@ const RegisterPage: React.FC = () => {
 
             <div>
               <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                disabled={isLoading}
-              />
+              <Input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} disabled={isLoading} />
               {errors.confirmPassword && <p className="text-red-500 text-xs">{errors.confirmPassword}</p>}
             </div>
 
