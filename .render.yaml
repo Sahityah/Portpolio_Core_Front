@@ -1,0 +1,7 @@
+services:
+  - type: static
+    name: portfolio-core-front
+    env: node
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: true
