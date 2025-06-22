@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import api from "@/lib/api";
-import {jwtDecode} from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 
 export type User = {
   id: string;
@@ -35,19 +35,28 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true });
         try {
-          // Dev mock login
+          // ✅ Mock Login
           if (email === "test@example.com" && password === "123456") {
+            const mockToken = "mock-token";
+            localStorage.setItem("token", mockToken);
             set({
-              user: { id: "1", name: "Demo User", email, avatar: null },
-              token: "mock-token",
+              user: {
+                id: "1",
+                name: "Demo User",
+                email,
+                avatar: null,
+                provider: "email",
+              },
+              token: mockToken,
               isAuthenticated: true,
               isLoading: false,
             });
             return;
           }
 
-          // API login
+          // ✅ Actual API login
           const { data } = await api.post("/api/auth/login", { email, password });
+          localStorage.setItem("token", data.token);
           set({
             user: data.user,
             token: data.token,
@@ -64,19 +73,28 @@ export const useAuthStore = create<AuthState>()(
       loginWithGoogle: async (credential) => {
         set({ isLoading: true });
         try {
-          // Dev mock login
+          // ✅ Mock Google Login
           if (credential === "mock-google-credential") {
+            const mockToken = "mock-google-token";
+            localStorage.setItem("token", mockToken);
             set({
-              user: { id: "1", name: "Google User", email: "googleuser@example.com", avatar: null },
-              token: "mock-token",
+              user: {
+                id: "2",
+                name: "Google User",
+                email: "googleuser@example.com",
+                avatar: null,
+                provider: "google",
+              },
+              token: mockToken,
               isAuthenticated: true,
               isLoading: false,
             });
             return;
           }
 
-          // API Google login
+          // ✅ Actual Google API login
           const { data } = await api.post("/api/auth/google-login", { credential });
+          localStorage.setItem("token", data.token);
           set({
             user: data.user,
             token: data.token,
@@ -94,6 +112,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           const { data } = await api.post("/api/auth/register", { name, email, password });
+          localStorage.setItem("token", data.token);
           set({
             user: data.user,
             token: data.token,
@@ -109,7 +128,8 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
-        localStorage.removeItem("auth-store"); // clear persisted storage
+        localStorage.removeItem("token");
+        localStorage.removeItem("auth-store");
       },
 
       updateProfile: async (userData) => {
