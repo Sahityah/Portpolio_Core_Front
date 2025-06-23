@@ -9,6 +9,14 @@ type TickerProps = {
 };
 
 export const StockTicker = ({ indices }: TickerProps) => {
+  if (indices.length === 0) {
+    return (
+      <div className="w-full bg-black text-white text-center py-2">
+        Loading market data...
+      </div>
+    );
+  }
+
   return (
     <div className="w-full bg-black text-white overflow-hidden whitespace-nowrap py-2">
       <div className="animate-marquee flex items-center space-x-12 px-4">

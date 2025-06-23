@@ -41,6 +41,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getIndices } from "@/components/marketData"
+
+interface IndexData {
+  symbol: string;
+  price: number;
+  change: number;
+}
+
+
 
 // Mock data
 const portfolioData = {
@@ -180,6 +189,28 @@ const DashboardPage = () => {
   const [chartPeriod, setChartPeriod] = useState("daily");
   const isMobile = useIsMobile();
   const [selectedSegment, setSelectedSegment] = useState("all");
+  const [indices, setIndices] = useState<IndexData[]>([])
+
+  useEffect(() => {
+    const fetchIndices = async () => {
+      try {
+        const results = await getIndices();
+        const symbols = ["NIFTY 50", "BANKNIFTY", "RELIANCE", "INFY"];
+        const formatted = results.map((res: any, index: number) => ({
+          symbol: symbols[index],
+          price: res.data.c,
+          change: (res.data.c - res.data.pc) / res.data.pc * 100,
+        }));
+        setIndices(formatted);
+      } catch (error) {
+        console.error("Failed to fetch indices:", error);
+      }
+    };
+
+    fetchIndices();
+    const interval = setInterval(fetchIndices, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Update current time every second
   useEffect(() => {
@@ -213,17 +244,7 @@ const DashboardPage = () => {
   return (
     <DashboardLayout>
       {/* Stock Ticker */}
-    <StockTicker
-      indices={[
-        { symbol: "NIFTY 50", price: 22986.30, change: 0.45 },
-        { symbol: "BANKNIFTY", price: 49123.55, change: -0.12 },
-        { symbol: "RELIANCE", price: 2925.40, change: 1.01 },
-        { symbol: "TCS", price: 3999.85, change: 0.35 },
-        { symbol: "INFY", price: 1565.25, change: -0.22 },
-        { symbol: "LT", price: 3675.40, change: 0.65 },
-        { symbol: "ICICI BANK", price: 1123.75, change: 0.78 },
-      ]}
-    />
+   <StockTicker indices={indices} />
 
 
 
