@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getIndices } from "@/components/marketData"
+import  getIndices  from "@/components/marketData"
 
 interface IndexData {
   symbol: string;
