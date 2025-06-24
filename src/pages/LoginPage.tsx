@@ -62,9 +62,9 @@ const useAuthStore = (() => {
     isAuthenticated: _isAuthenticated,
   });
 
-  const subscribe = (listener: () => void) => {
+  const subscribe = (listener: () => void): (() => void) => { // Explicitly type the return as void
     _listeners.add(listener);
-    return () => _listeners.delete(listener);
+    return () => { _listeners.delete(listener); }; // Wrap in a function that returns void
   };
 
   const publish = () => {
@@ -146,7 +146,7 @@ const useAuthStore = (() => {
     useEffect(() => {
       const listener = () => setState(getSnapshot());
       const unsubscribe = subscribe(listener);
-      return () => unsubscribe();
+      return unsubscribe; // This is now correct, as subscribe returns () => void
     }, []);
 
     return { ...state, login, loginWithGoogle, logout };

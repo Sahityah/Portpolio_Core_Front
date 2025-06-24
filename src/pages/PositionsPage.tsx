@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-// import DashboardLayout from "@/components/layout/DashboardLayout"; // <--- REMOVE THIS IMPORT
+// import DashboardLayout from "@/components/layout/DashboardLayout"; // Uncomment if still needed
 import { Card } from "@/components/ui/card";
 import { TableHead, TableRow, TableHeader, TableCell, TableBody, Table } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter } from "lucide-react";
+import { Search, Plus, Filter, Loader2 } from "lucide-react"; // Import Loader2 for spinners
 import { formatCurrency } from "@/lib/currency";
 import { SecuritiesSearch } from "@/components/SecuritiesSearch";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -35,65 +35,52 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-// Define the Position interface
+// Define the Position interface - ensure this matches your Spring backend's DTO/Entity
 interface Position {
-  id: string;
+  id: string; // Assuming your backend provides an ID, e.g., UUID or auto-increment
   symbol: string;
-  strike: string;
-  type: string;
-  segment: string;
+  strike: string; // Can be string for F&O, or price for EQ, or empty
+  type: string; // e.g., "CALL", "PUT", "FUT", "EQ"
+  segment: string; // e.g., "fno", "equity"
   qty: number;
   entryPrice: number;
-  ltp: number;
-  pnl: number;
-  mtm: number;
-  status: string;
+  ltp: number; // Last Traded Price
+  pnl: number; // Profit & Loss
+  mtm: number; // Mark-to-Market value
+  status: string; // e.g., "active", "closed"
+  // Add other fields if your backend returns them (e.g., 'userId', 'tradeDate', etc.)
 }
 
-// Mock API functions (replace with actual fetch calls)
-const API_BASE_URL = "/api"; // Replace with your actual backend API base URL
+// Define the Security type exactly as it's defined in SecuritiesSearch.tsx
+interface Security {
+  symbol: string;
+  name: string;
+  type: "equity" | "fno" | "index"; // Add other types if your search supports them
+}
 
-const fetchPositionsFromBackend = async (): Promise<Position[]> => {
-  await new Promise(resolve => setTimeout(resolve, 800));
-  const mockData = [
-    {
-      id: "pos1", symbol: "NIFTY", strike: "18000 CE", type: "CALL", segment: "fno",
-      qty: 75, entryPrice: 12050, ltp: 13725, pnl: 125625, mtm: 125625, status: "active"
-    },
-    {
-      id: "pos2", symbol: "BANKNIFTY", strike: "44000 PUT", type: "PUT", segment: "fno",
-      qty: 75, entryPrice: 13750, ltp: 13725, pnl: 405000, mtm: 15255, status: "active"
-    },
-    {
-      id: "pos3", symbol: "RELIANCE", strike: "2400", type: "EQ", segment: "equity",
-      qty: 50, entryPrice: 2385.5, ltp: 2450.75, pnl: 326250, mtm: 13660, status: "active"
-    },
-    {
-      id: "pos4", symbol: "TATAMOTOR", strike: "675", type: "EQ", segment: "equity",
-      qty: 100, entryPrice: 635.55, ltp: 622.15, pnl: -133000, mtm: 62215, status: "closed"
-    },
-    {
-      id: "pos5", symbol: "INFY", strike: "1480", type: "EQ", segment: "equity",
-      qty: 75, entryPrice: 1500.05, ltp: 1474.45, pnl: -191250, mtm: 110584, status: "active"
-    }
-  ];
-  return mockData;
+// --- IMPORTANT: Replace with your actual Render Spring Backend URL ---
+const API_BASE_URL = "YOUR_RENDER_SPRING_BACKEND_URL"; // e.g., "https://my-spring-app.onrender.com"
+
+// --- Helper to get Authentication Token ---
+// This is critical for user-wise data.
+// You need to replace this logic with how your frontend gets the token
+// that your Spring backend expects (e.g., from localStorage, a global context, or `__initial_auth_token` if applicable).
+const getAuthToken = (): string | null => {
+  // Example: Retrieve a JWT from localStorage
+  // const token = localStorage.getItem('authToken');
+
+  // Example: If __initial_auth_token from Canvas is meant for your Spring backend
+  // declare const __initial_auth_token: string | undefined;
+  // const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+  // Placeholder for demonstration:
+  // In a real app, this would be dynamically fetched after login
+  // For testing, you might hardcode a valid token *temporarily* in development,
+  // but NEVER in production.
+  console.warn("Auth token logic needs to be implemented. Using placeholder.");
+  return "Bearer YOUR_AUTH_TOKEN_LOGIC_HERE"; // e.g., "Bearer eyJhbGciOi..."
 };
 
-const addPositionToBackend = async (newPositionData: Omit<Position, 'id' | 'pnl' | 'ltp' | 'mtm' | 'status'>): Promise<Position> => {
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  const newId = `pos${Math.random().toString(36).substring(2, 9)}`;
-  const ltp = newPositionData.entryPrice;
-  const mtm = newPositionData.entryPrice * newPositionData.qty;
-  return {
-    id: newId,
-    ...newPositionData,
-    ltp: ltp,
-    pnl: 0,
-    mtm: mtm,
-    status: "active"
-  };
-};
 
 const PositionsPage = () => {
   const [positions, setPositions] = useState<Position[]>([]);
@@ -106,31 +93,57 @@ const PositionsPage = () => {
   const [isNewPositionDialogOpen, setIsNewPositionDialogOpen] = useState(false);
   const [newPosition, setNewPosition] = useState({
     symbol: "",
-    name: "",
-    type: "",
-    segment: "equity",
-    strike: "",
+    name: "", // For displaying selected security name
+    type: "", // For F&O: CALL, PUT, FUT, or EQ for equity
+    segment: "equity", // 'equity' or 'fno'
+    strike: "", // Only relevant for F&O
     qty: "",
     entryPrice: ""
   });
-  const [positionType, setPositionType] = useState("equity");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [positionType, setPositionType] = useState<"equity" | "fno">("equity"); // Controls form fields
+  const [isSubmitting, setIsSubmitting] = useState(false); // For add position dialog submission
 
-  const isMobile = useIsMobile();
-  const { toast } = useToast();
+  const isMobile = useIsMobile(); // Assuming this hook is defined elsewhere
+  const { toast } = useToast(); // Assuming this hook is defined elsewhere
 
+  // --- Fetch Positions from Spring Backend ---
   const fetchPositions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPositionsFromBackend();
+      const token = getAuthToken();
+      if (!token) {
+        setError("Authentication token missing. Please log in.");
+        setLoading(false);
+        toast({
+          title: "Authentication Error",
+          description: "Could not fetch positions. Authentication required.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/positions`, { // Adjust endpoint as needed
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token, // Send the auth token
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Unknown error" }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const data: Position[] = await response.json();
       setPositions(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch positions:", err);
-      setError("Failed to load positions. Please try again.");
+      setError(`Failed to load positions: ${err.message || "Network error"}`);
       toast({
         title: "Error",
-        description: "Failed to load positions.",
+        description: `Failed to load positions: ${err.message || "Please try again."}`,
         variant: "destructive",
       });
     } finally {
@@ -140,7 +153,7 @@ const PositionsPage = () => {
 
   useEffect(() => {
     fetchPositions();
-  }, [fetchPositions]);
+  }, [fetchPositions]); // Run once on mount and when fetchPositions changes (due to useCallback)
 
   const filteredPositions = positions.filter(position => {
     const matchesSearch =
@@ -154,16 +167,17 @@ const PositionsPage = () => {
     return matchesSearch && matchesStatus && matchesSegment;
   });
 
-  const handleSecuritySelect = (security: { symbol: string; name: string; type: 'equity' | 'fno' }) => {
-    setNewPosition({
-      ...newPosition,
+  const handleSecuritySelect = useCallback((security: Security) => {
+    setNewPosition((prev) => ({
+      ...prev,
       symbol: security.symbol,
       name: security.name,
       segment: security.type === 'equity' ? 'equity' : 'fno',
-      type: security.type === 'equity' ? 'EQ' : newPosition.type
-    });
-    setPositionType(security.type);
-  };
+      type: security.type === 'equity' ? 'EQ' : '', // Clear type for F&O, set EQ for equity
+      strike: security.type === 'equity' ? '' : prev.strike, // Clear strike for equity
+    }));
+    setPositionType(security.type === 'equity' ? 'equity' : 'fno');
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -173,17 +187,17 @@ const PositionsPage = () => {
     });
   };
 
-  const handleSegmentChange = (value: string) => {
+  const handleSegmentChange = useCallback((value: "equity" | "fno") => {
     setPositionType(value);
     setNewPosition({
       ...newPosition,
       segment: value,
-      strike: value === 'fno' ? '' : '',
-      type: value === 'fno' ? '' : 'EQ'
+      strike: value === 'fno' ? newPosition.strike : '', // Keep strike if switching to F&O, clear if to Equity
+      type: value === 'fno' ? newPosition.type : 'EQ' // Keep type if switching to F&O, set EQ for Equity
     });
-  };
+  }, [newPosition]);
 
-  const resetNewPositionForm = () => {
+  const resetNewPositionForm = useCallback(() => {
     setNewPosition({
       symbol: "",
       name: "",
@@ -194,63 +208,122 @@ const PositionsPage = () => {
       entryPrice: ""
     });
     setPositionType("equity");
-  };
+  }, []);
 
-  const handleAddPosition = async () => {
+  // --- Add Position to Spring Backend ---
+  const handleAddPosition = useCallback(async () => {
     if (!newPosition.symbol || !newPosition.qty || !newPosition.entryPrice) {
       toast({
-        title: "Missing information",
-        description: "Please fill all required fields",
+        title: "Missing Information",
+        description: "Please fill all required fields: Security, Quantity, Entry Price.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const parsedQty = parseInt(newPosition.qty);
+    const parsedEntryPrice = parseFloat(newPosition.entryPrice);
+
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Quantity must be a positive number.",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (isNaN(parsedEntryPrice) || parsedEntryPrice <= 0) {
+      toast({
+        title: "Invalid Entry Price",
+        description: "Entry Price must be a positive number.",
         variant: "destructive"
       });
       return;
     }
 
     if (positionType === 'fno' && (!newPosition.type || !newPosition.strike)) {
-        toast({
-            title: "Missing F&O details",
-            description: "Please select option type and enter strike price for F&O positions.",
-            variant: "destructive"
-        });
-        return;
+      toast({
+        title: "Missing F&O details",
+        description: "Please select option type (CALL/PUT/FUT) and enter strike price for F&O positions.",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (positionType === 'fno' && (isNaN(parseFloat(newPosition.strike)))) {
+      toast({
+        title: "Invalid Strike Price",
+        description: "Strike Price must be a number for F&O positions.",
+        variant: "destructive"
+      });
+      return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const positionToAdd: Omit<Position, 'id' | 'pnl' | 'ltp' | 'mtm' | 'status'> = {
+      // Structure the data according to what your Spring backend's DTO expects
+      const positionToSave = {
         symbol: newPosition.symbol,
-        strike: positionType === 'equity' ? String(newPosition.entryPrice) : newPosition.strike,
+        strike: positionType === 'fno' ? newPosition.strike : null, // Send null or empty string for equity strike
         type: positionType === 'equity' ? 'EQ' : newPosition.type,
         segment: positionType,
-        qty: parseInt(newPosition.qty),
-        entryPrice: parseFloat(newPosition.entryPrice),
+        qty: parsedQty,
+        entryPrice: parsedEntryPrice,
+        // For new positions, LTP, PnL, MTM, Status might be set by backend upon creation
+        // or you can send initial values if your backend accepts them.
+        // Sending default/initial values that backend can overwrite:
+        ltp: parsedEntryPrice,
+        pnl: 0,
+        mtm: parsedQty * parsedEntryPrice,
+        status: "active",
       };
 
-      const addedPosition = await addPositionToBackend(positionToAdd);
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error("Authentication token missing.");
+      }
 
-      setPositions((prevPositions) => [addedPosition, ...prevPositions]);
+      const response = await fetch(`${API_BASE_URL}/api/positions`, { // Adjust endpoint as needed
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token, // Send the auth token
+        },
+        body: JSON.stringify(positionToSave),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Unknown error" }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const addedPosition: Position = await response.json(); // Assuming backend returns the created position
+
+      // After successful addition, refetch all positions to update the table
+      // This ensures consistency with backend state and any backend-generated fields (like ID)
+      await fetchPositions();
+
       setIsNewPositionDialogOpen(false);
       resetNewPositionForm();
 
       toast({
-        title: "Position added",
-        description: `${addedPosition.symbol} ${addedPosition.type} position has been added successfully`,
+        title: "Position Added",
+        description: `${addedPosition.symbol} (${addedPosition.segment}) position has been added successfully.`,
       });
     } catch (error: any) {
       console.error("Error adding position:", error);
       toast({
         title: "Failed to add position",
-        description: error.message || "An error occurred while adding the position",
+        description: error.message || "An error occurred while adding the position to the database.",
         variant: "destructive"
       });
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [newPosition, positionType, resetNewPositionForm, fetchPositions, toast]);
 
   return (
-    // <DashboardLayout>  <--- REMOVE THIS LINE
+    // <DashboardLayout> {/* Uncomment this if you still use DashboardLayout */}
       <div className="container mx-auto py-6 px-4 md:px-6 max-w-7xl">
         <div className="flex flex-col space-y-6">
           {/* Header and Filters */}
@@ -337,6 +410,7 @@ const PositionsPage = () => {
                   {loading ? (
                     <TableRow>
                       <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
                         Loading positions...
                       </TableCell>
                     </TableRow>
@@ -449,11 +523,11 @@ const PositionsPage = () => {
                   <Label>Security</Label>
                   <SecuritiesSearch
                     onSelect={handleSecuritySelect}
-                    segment={positionType === 'equity' ? 'equity' : 'fno'}
+                    segment={positionType} // Pass current segment to search filter
                     placeholder="Search for securities..."
                   />
                   {newPosition.name && (
-                    <p className="text-sm text-muted-foreground mt-1">{newPosition.name}</p>
+                    <p className="text-sm text-muted-foreground mt-1">Selected: <span className="font-medium text-foreground">{newPosition.name} ({newPosition.symbol})</span></p>
                   )}
                 </div>
 
@@ -522,7 +596,7 @@ const PositionsPage = () => {
                 <Button onClick={handleAddPosition} disabled={isSubmitting}>
                   {isSubmitting ? (
                     <>
-                      <div className="h-4 w-4 mr-2 border-2 border-r-transparent border-white rounded-full animate-spin"></div>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Adding...
                     </>
                   ) : (
@@ -534,7 +608,7 @@ const PositionsPage = () => {
           </Dialog>
         </div>
       </div>
-    // </DashboardLayout> <--- REMOVE THIS LINE
+    // </DashboardLayout> {/* Uncomment this if you still use DashboardLayout */}
   );
 };
 
