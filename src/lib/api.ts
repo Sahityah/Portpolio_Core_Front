@@ -17,7 +17,7 @@ const api = axios.create({
 // Request Interceptor (Attach JWT token)
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token"); // Assuming JWT token is stored in localStorage
+    const token = localStorage.getItem('authToken'); // Assuming JWT token is stored in localStorage
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -74,9 +74,8 @@ export default api;
 export const authApi = {
   login: (data: { email: string; password: string }) => api.post("/auth/login", data),
   register: (data: { name: string; email: string; password: string }) => api.post("/auth/register", data),
+  googleLogin: (credential: string) => api.post("/auth/google-login", { credential }), // <-- Add this line
   getProfile: () => api.get("/auth/profile"),
-  // For logout, often a client-side action (clearing token) is sufficient.
-  // A backend call is useful if you need to invalidate sessions/tokens server-side.
   logout: () => api.post("/auth/logout"),
 };
 
@@ -84,6 +83,7 @@ export const portfolioApi = {
   getPortfolio: () => api.get("/portfolio"),
   getPositions: () => api.get("/portfolio/positions"), // This might be redundant if getPortfolio includes positions
   downloadReport: () => api.get("/portfolio/report", { responseType: "blob" }),
+  getPnlChartData: (period: string) => api.get(`/portfolio/pnl-chart-data`, { params: { period } }),
 };
 
 export const securitiesApi = {

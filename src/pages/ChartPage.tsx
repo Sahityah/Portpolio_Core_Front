@@ -1,31 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-// REMOVE THIS IMPORT: DashboardLayout is no longer directly imported and wrapped here
-// import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/card"; // Keeping existing alias as it seems to resolve
 import {
   createChart,
   ColorType,
   IChartApi,
   ISeriesApi,
-} from "lightweight-charts";
-import { Button } from "@/components/ui/button";
-import { SecuritiesSearch } from "@/components/SecuritiesSearch";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { Calendar, Clock, Maximize, Minimize, RotateCcw } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+} from "lightweight-charts"; // Keeping direct import as it's an external library
+import { Button } from "@/components/ui/button"; // Keeping existing alias
+import { SecuritiesSearch } from "@/components/SecuritiesSearch"; // Adjusted to absolute path from /src
+import { useIsMobile } from "@/hooks/use-mobile"; // Keeping existing alias
+import { Calendar, Clock, Maximize, Minimize, RotateCcw, Loader2 } from "lucide-react"; // Added Loader2 import explicitly
+import { useToast } from "@/hooks/use-toast"; // Keeping existing alias
 import {
   Tabs,
   TabsList,
   TabsTrigger,
-} from "@/components/ui/tabs";
+} from "@/components/ui/tabs"; // Keeping existing alias
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/select"; // Keeping existing alias
+import { Skeleton } from "@/components/ui/skeleton"; // Keeping existing alias
+import { AxiosResponse } from 'axios'; // Keeping direct import
 
 // Define the Security type exactly as it's defined in SecuritiesSearch.tsx
 interface Security {
@@ -34,60 +33,42 @@ interface Security {
   type: string; // e.g., "equity", "fno", "index"
 }
 
+// Define the structure of candlestick data points expected from the API
+interface CandlestickDataPoint {
+  time: string; // ISO string format for date (e.g., "YYYY-MM-DD")
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 // --- Utility Functions ---
+// Debounce function to limit the rate at which a function can fire.
 const debounce = (func: Function, delay: number) => {
-  let timeout: NodeJS.Timeout;
+  let timeout: any; // Changed type to 'any' for broader compatibility with NodeJS.Timeout in some environments
   return function executed(...args: any[]) {
     const context = this;
     const later = () => {
-      timeout = setTimeout(() => func.apply(context, args), 0);
+      clearTimeout(timeout); // Clear previous timeout immediately
+      timeout = setTimeout(() => func.apply(context, args), 0); // Execute after 0ms, allowing batching
     };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, delay);
+    clearTimeout(timeout); // Clear any existing timeout on new call
+    timeout = setTimeout(later, delay); // Set new timeout
   };
 };
 
-// --- Sample chart data generation (for demonstration) ---
-const generateCandlestickData = (days: number = 50) => {
-  const data = [];
-  const today = new Date();
-  let price = 18500 + Math.random() * 500;
-
-  for (let i = days; i > 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const volatility = Math.random() * 2 + 0.1;
-    const open = price;
-    const high = open + Math.random() * 100 * volatility;
-    const low = Math.max(open - Math.random() * 100 * volatility, open * 0.95);
-    const close =
-      Math.random() > 0.5
-        ? open + Math.random() * (high - open)
-        : open - Math.random() * (open - low);
-
-    data.push({
-      time: date.toISOString().split("T")[0],
-      open,
-      high,
-      low,
-      close,
-    });
-
-    price = close;
-  }
-  return data;
-};
 
 // --- Sample symbols (static for chart data, but dynamic for search) ---
-const chartSymbols = [
-  { id: "NIFTY", name: "NIFTY Index", data: generateCandlestickData(60) },
-  { id: "BANKNIFTY", name: "BANKNIFTY Index", data: generateCandlestickData(70) },
-  { id: "RELIANCE", name: "Reliance Industries", data: generateCandlestickData(55) },
-  { id: "TCS", name: "Tata Consultancy Services", data: generateCandlestickData(65) },
-  { id: "HDFCBANK", name: "HDFC Bank", data: generateCandlestickData(75) },
-  // Add some dummy entries that SecuritiesSearch might return but for which we don't have local chart data
-  { id: "INFY", name: "Infosys Ltd", data: generateCandlestickData(50) },
-  { id: "ICICIBANK", name: "ICICI Bank", data: generateCandlestickData(50) },
+// This list will be used for initial activeSymbol state and possibly for SecuritiesSearch suggestions.
+// The 'data' property is removed as it will now be fetched dynamically via API.
+const chartSymbols: Security[] = [
+  { symbol: "NIFTY", name: "NIFTY Index", type: "index" },
+  { symbol: "BANKNIFTY", name: "BANKNIFTY Index", type: "index" },
+  { symbol: "RELIANCE", name: "Reliance Industries", type: "equity" },
+  { symbol: "TCS", name: "Tata Consultancy Services", type: "equity" },
+  { symbol: "HDFCBANK", name: "HDFC Bank", type: "equity" },
+  { symbol: "INFY", name: "Infosys Ltd", type: "equity" },
+  { symbol: "ICICIBANK", name: "ICICI Bank", type: "equity" },
 ];
 
 // --- Time intervals ---
@@ -102,11 +83,31 @@ const timeIntervals = [
   { value: "1M", label: "1 Month" },
 ];
 
+// --- Import the API services and define a local interface for marketApi ---
+// This interface helps TypeScript understand the methods available on 'marketApi'
+// if the original declaration is incomplete in your project's lib/api.ts.
+// It assumes marketApi is an object with these methods returning AxiosResponses.
+interface IMarketApi {
+  getChartData: (symbol: string, interval: string) => Promise<AxiosResponse<CandlestickDataPoint[]>>;
+  // Assuming searchSecurities exists on marketApi, define it here if needed by other components
+  searchSecurities?: (query: string, segment: string) => Promise<AxiosResponse<Security[]>>;
+}
+
+// Cast the imported marketApi to the custom interface
+// This is a workaround to resolve compilation errors if the original type definition is missing methods or has incorrect signatures.
+// If your actual marketApi object at runtime does NOT have these methods or their expected behavior,
+// this will lead to runtime errors instead of compilation errors.
+import { marketApi as originalMarketApi } from "@/lib/api"; // Adjusted to absolute path from /src
+const marketApi: IMarketApi = originalMarketApi as IMarketApi;
+
+
 const ChartPage = () => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const activeSeriesRef = useRef<ISeriesApi<any> | null>(null);
-  const [activeSymbol, setActiveSymbol] = useState(chartSymbols[0]);
+
+  // Initialize activeSymbol with the first item from chartSymbols
+  const [activeSymbol, setActiveSymbol] = useState<Security>(chartSymbols[0]);
   const [selectedInterval, setSelectedInterval] = useState("1d");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chartType, setChartType] = useState<"candle" | "line" | "area">("candle");
@@ -116,10 +117,94 @@ const ChartPage = () => {
   const { toast } = useToast();
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // Chart initialization and update logic
+  // --- Fetch Chart Data from API ---
+  const fetchChartData = useCallback(async () => {
+    // Ensure we have a chart instance, a symbol, and an interval before fetching
+    if (!chartRef.current || !activeSymbol?.symbol || !selectedInterval) {
+      setIsLoading(false); // Turn off loading if pre-conditions aren't met
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Call the marketApi to get chart data
+      const response = await marketApi.getChartData(activeSymbol.symbol, selectedInterval);
+      const data: CandlestickDataPoint[] = response.data; // Cast response data to expected type
+
+      if (!data || data.length === 0) {
+        setError("No chart data available for the selected symbol and interval.");
+        // If no data, ensure existing series is removed
+        if (activeSeriesRef.current) {
+            chartRef.current?.removeSeries(activeSeriesRef.current);
+            activeSeriesRef.current = null;
+        }
+        return;
+      }
+
+      // Remove existing series before adding a new one to prevent conflicts
+      if (activeSeriesRef.current) {
+        chartRef.current?.removeSeries(activeSeriesRef.current);
+        activeSeriesRef.current = null;
+      }
+
+      let newSeries: ISeriesApi<any>;
+      switch (chartType) {
+        case "line":
+          newSeries = chartRef.current.addLineSeries({
+            color: "#2962FF", // A vibrant blue
+            lineWidth: 2,
+          });
+          // For line chart, only 'time' and 'value' (closing price) are needed
+          newSeries.setData(data.map((item) => ({ time: item.time, value: item.close })));
+          break;
+        case "area":
+          newSeries = chartRef.current.addAreaSeries({
+            topColor: "rgba(41, 98, 255, 0.4)",    // Light blue top fill
+            bottomColor: "rgba(41, 98, 255, 0.1)", // Even lighter blue bottom fill
+            lineColor: "rgba(41, 98, 255, 1)",    // Solid blue line
+            lineWidth: 2,
+          });
+          // For area chart, also only 'time' and 'value' (closing price) are needed
+          newSeries.setData(data.map((item) => ({ time: item.time, value: item.close })));
+          break;
+        case "candle":
+        default:
+          newSeries = chartRef.current.addCandlestickSeries({
+            upColor: "#26a69a",   // Green for up candles
+            downColor: "#ef5350", // Red for down candles
+            borderVisible: false, // No border around candles
+            wickUpColor: "#26a69a",   // Green for up wicks
+            wickDownColor: "#ef5350", // Red for down wicks
+          });
+          // For candlestick chart, the full OHLCV data is needed
+          newSeries.setData(data);
+          break;
+      }
+
+      activeSeriesRef.current = newSeries; // Store the active series reference
+      chartRef.current.timeScale().fitContent(); // Adjust chart to fit all data
+      setLastUpdated(new Date()); // Update last updated timestamp
+    } catch (err: any) {
+      console.error("Error fetching chart data:", err);
+      // Construct a user-friendly error message
+      const errorMessage = err.response?.data?.message || err.message || "Failed to load chart data. Please try again.";
+      setError(errorMessage);
+      toast({
+        title: "Chart Load Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false); // Always turn off loading at the end
+    }
+  }, [activeSymbol, selectedInterval, chartType, toast]); // Dependencies for useCallback: re-run if these states change
+
+  // Effect for chart initialization and data loading/reloading
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    // Handle chart resizing (debounced)
     const handleResize = debounce(() => {
       if (chartRef.current && chartContainerRef.current) {
         chartRef.current.applyOptions({
@@ -130,152 +215,88 @@ const ChartPage = () => {
       }
     }, 100);
 
+    // Initialize chart if it doesn't exist
     if (!chartRef.current) {
       chartRef.current = createChart(chartContainerRef.current, {
         layout: {
-          background: { type: ColorType.Solid, color: "#ffffff" },
-          textColor: "#333",
+          background: { type: ColorType.Solid, color: "#ffffff" }, // White background
+          textColor: "#333", // Dark grey text
         },
         width: chartContainerRef.current.clientWidth,
-        height: isMobile ? 400 : 500,
+        height: isMobile ? 400 : 500, // Responsive height
         grid: {
-          vertLines: { color: "#f0f3fa" },
-          horzLines: { color: "#f0f3fa" },
+          vertLines: { color: "#f0f3fa" }, // Light grey vertical grid lines
+          horzLines: { color: "#f0f3fa" }, // Light grey horizontal grid lines
         },
         rightPriceScale: {
           visible: true,
-          borderColor: '#d1d4dc',
+          borderColor: '#d1d4dc', // Light grey border for price scale
         },
         timeScale: {
           visible: true,
-          borderColor: '#d1d4dc',
+          borderColor: '#d1d4dc', // Light grey border for time scale
           timeVisible: true,
-          secondsVisible: false,
+          secondsVisible: false, // Hide seconds on time scale
         },
         crosshair: {
-          mode: 0, // CrosshairMode.Normal
+          mode: 0, // CrosshairMode.Normal - follows mouse
         },
       });
     }
 
-    const loadChartData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = activeSymbol.data;
+    // Call fetchChartData whenever dependencies (activeSymbol, selectedInterval, chartType) change
+    // This will handle initial load and subsequent reloads due to user interaction
+    fetchChartData();
 
-        if (!data || data.length === 0) {
-          throw new Error(`No data available for ${activeSymbol.name} with interval ${selectedInterval}.`);
-        }
-
-        if (activeSeriesRef.current) {
-          chartRef.current?.removeSeries(activeSeriesRef.current);
-          activeSeriesRef.current = null;
-        }
-
-        let series: ISeriesApi<any>;
-        switch (chartType) {
-          case "line":
-            series = chartRef.current.addLineSeries({
-              color: "#2962FF",
-              lineWidth: 2,
-            });
-            series.setData(data.map((item) => ({ time: item.time, value: item.close })));
-            break;
-          case "area":
-            series = chartRef.current.addAreaSeries({
-              topColor: "rgba(41, 98, 255, 0.4)",
-              bottomColor: "rgba(41, 98, 255, 0.1)",
-              lineColor: "rgba(41, 98, 255, 1)",
-              lineWidth: 2,
-            });
-            series.setData(data.map((item) => ({ time: item.time, value: item.close })));
-            break;
-          case "candle":
-          default:
-            series = chartRef.current.addCandlestickSeries({
-              upColor: "#26a69a",
-              downColor: "#ef5350",
-              borderVisible: false,
-              wickUpColor: "#26a69a",
-              wickDownColor: "#ef5350",
-            });
-            series.setData(data);
-            break;
-        }
-
-        activeSeriesRef.current = series;
-        chartRef.current.timeScale().fitContent();
-        setLastUpdated(new Date());
-      } catch (err: any) {
-        setError(err.message);
-        toast({
-          title: "Chart Load Error",
-          description: err.message || "Failed to load chart data.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadChartData();
-
+    // Add event listener for window resize
     window.addEventListener("resize", handleResize);
 
+    // Cleanup function for useEffect
     return () => {
       window.removeEventListener("resize", handleResize);
       if (chartRef.current) {
-        chartRef.current.remove();
+        chartRef.current.remove(); // Dispose of the chart instance
         chartRef.current = null;
       }
     };
-  }, [activeSymbol, chartType, selectedInterval, isFullscreen, isMobile, toast]);
+  }, [fetchChartData, isFullscreen, isMobile]); // fetchChartData is a dependency because it's called inside,
+                                              // isFullscreen and isMobile affect chart dimensions.
 
   // Callback for when a security is selected from the SecuritiesSearch component
   const handleSecuritySelect = useCallback((security: Security) => {
-    const selectedSymbolData = chartSymbols.find((s) => s.id === security.symbol);
-
-    if (selectedSymbolData) {
-      setActiveSymbol(selectedSymbolData);
-      toast({
-        title: "Chart Updated",
-        description: `Showing chart for ${selectedSymbolData.name} (${security.type})`,
-      });
-    } else {
-      setActiveSymbol({
-        id: security.symbol,
-        name: security.name,
-        data: generateCandlestickData(5),
-      });
-      toast({
-        title: "Data Not Found (Sample)",
-        description: `Chart data for ${security.name} (${security.symbol}) is not available in sample data. Generating placeholder.`,
-        variant: "warning",
-      });
-    }
-    setLastUpdated(new Date());
+    setActiveSymbol(security); // Set the active symbol to the selected security object
+    toast({
+      title: "Chart Updated",
+      description: `Showing chart for ${security.name} (${security.symbol})`,
+    });
+    // fetchChartData will be triggered by the useEffect due to activeSymbol change
   }, [toast]);
 
+  // Handler for changing chart type (Candle, Line, Area)
   const handleChartTypeChange = useCallback((type: "candle" | "line" | "area") => {
-    setChartType(type);
+    setChartType(type); // Update chart type state
     toast({
       title: "Chart Type Changed",
       description: `Displaying chart as ${type} type.`,
     });
+    // fetchChartData will be triggered by the useEffect due to chartType change
   }, [toast]);
 
+  // Handler for changing time interval
   const handleIntervalChange = useCallback((interval: string) => {
-    setSelectedInterval(interval);
+    setSelectedInterval(interval); // Update interval state
     toast({
       title: "Time Interval Changed",
-      description: `Chart interval set to ${interval}. (Data regeneration simulated)`,
+      description: `Chart interval set to ${interval}.`,
     });
+    // fetchChartData will be triggered by the useEffect due to selectedInterval change
   }, [toast]);
 
+  // Toggle fullscreen mode for the chart container
   const toggleFullscreen = useCallback(() => {
     if (!chartContainerRef.current) return;
     if (!document.fullscreenElement) {
+      // Enter fullscreen
       chartContainerRef.current.requestFullscreen().catch((err) => {
         toast({
           title: "Fullscreen Error",
@@ -285,6 +306,7 @@ const ChartPage = () => {
       });
       setIsFullscreen(true);
     } else {
+      // Exit fullscreen
       document.exitFullscreen().catch((err) => {
         toast({
           title: "Fullscreen Error",
@@ -296,6 +318,7 @@ const ChartPage = () => {
     }
   }, [toast]);
 
+  // Effect to sync fullscreen state with browser's fullscreen API
   useEffect(() => {
     const fullscreenChangeHandler = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -306,6 +329,7 @@ const ChartPage = () => {
     };
   }, []);
 
+  // Reset chart view to fit all content
   const resetChart = useCallback(() => {
     if (chartRef.current) {
       chartRef.current.timeScale().fitContent();
@@ -316,26 +340,26 @@ const ChartPage = () => {
     }
   }, [toast]);
 
+  // Manually refresh chart data
   const refreshData = useCallback(() => {
-    setActiveSymbol({ ...activeSymbol });
-    setLastUpdated(new Date());
+    fetchChartData(); // Simply re-trigger the data fetch
+    setLastUpdated(new Date()); // Update the last updated timestamp immediately
     toast({
       title: "Data Refreshed",
       description: "Attempting to refresh chart data.",
     });
-  }, [activeSymbol, toast]);
+  }, [fetchChartData, toast]); // Depends on fetchChartData
 
   return (
-    // REMOVED THE DashboardLayout WRAPPER
-    <div className="container mx-auto py-6 px-4 max-w-7xl">
-      <Card className="p-4 md:p-6 shadow-lg rounded-lg">
+    <div className="container mx-auto py-6 px-4 max-w-7xl font-inter">
+      <Card className="p-4 md:p-6 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
           {/* Securities Search */}
           <div className="w-full md:w-1/3">
             <SecuritiesSearch
               onSelect={handleSecuritySelect}
               placeholder="Search for stocks or indices..."
-              segment="all"
+              segment="all" // Assuming SecuritiesSearch can handle 'all' segments
             />
           </div>
 
@@ -343,8 +367,8 @@ const ChartPage = () => {
           <div className="flex flex-wrap items-center gap-2 md:gap-4 justify-center md:justify-end">
             {/* Interval Select */}
             <Select value={selectedInterval} onValueChange={handleIntervalChange}>
-              <SelectTrigger className="w-[120px]">
-                <Clock className="h-4 w-4 mr-2" />
+              <SelectTrigger className="w-[120px] rounded-md shadow-sm">
+                <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Interval" />
               </SelectTrigger>
               <SelectContent>
@@ -358,54 +382,58 @@ const ChartPage = () => {
 
             {/* Chart Type Tabs */}
             <Tabs value={chartType} onValueChange={handleChartTypeChange as (value: string) => void}>
-              <TabsList>
-                <TabsTrigger value="candle">Candle</TabsTrigger>
-                <TabsTrigger value="line">Line</TabsTrigger>
-                <TabsTrigger value="area">Area</TabsTrigger>
+              <TabsList className="bg-gray-100 dark:bg-gray-800 rounded-md shadow-sm">
+                <TabsTrigger value="candle" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white rounded-md transition-colors">Candle</TabsTrigger>
+                <TabsTrigger value="line" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white rounded-md transition-colors">Line</TabsTrigger>
+                <TabsTrigger value="area" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white rounded-md transition-colors">Area</TabsTrigger>
               </TabsList>
             </Tabs>
 
             {/* Action Buttons */}
-            <Button variant="outline" size="sm" onClick={resetChart} title="Reset Chart View">
+            <Button variant="outline" size="sm" onClick={resetChart} title="Reset Chart View" className="rounded-md shadow-sm transition-all duration-200 ease-in-out hover:scale-105">
               <RotateCcw className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={refreshData} title="Refresh Data">
-              <RotateCcw className="h-4 w-4 rotate-180" />
+            <Button variant="outline" size="sm" onClick={refreshData} title="Refresh Data" className="rounded-md shadow-sm transition-all duration-200 ease-in-out hover:scale-105">
+              <RotateCcw className="h-4 w-4 rotate-180" /> {/* Rotated icon for refresh */}
             </Button>
-            <Button variant="outline" size="sm" onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
+            <Button variant="outline" size="sm" onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"} className="rounded-md shadow-sm transition-all duration-200 ease-in-out hover:scale-105">
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
             </Button>
           </div>
         </div>
 
-        <div className="mb-2 text-sm text-gray-500 flex justify-between items-center">
-          <span className="font-semibold text-lg text-primary">{activeSymbol.name}</span>
-          <span>
+        {/* Current Symbol and Last Updated Info */}
+        <div className="mb-2 text-sm text-gray-500 flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-4">
+          <span className="font-semibold text-lg text-gray-900 dark:text-gray-100">{activeSymbol.name} ({activeSymbol.symbol})</span>
+          <span className="text-sm">
             Last Updated:{" "}
-            {lastUpdated.toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+            <span className="font-medium">
+              {lastUpdated.toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+            </span>
           </span>
         </div>
 
         {/* Chart Container */}
         <div
           ref={chartContainerRef}
-          className={`w-full ${isFullscreen ? "h-screen-minus-header" : "h-[400px] md:h-[500px]"} relative`}
+          className={`w-full ${isFullscreen ? "h-screen-minus-header" : "h-[400px] md:h-[500px]"} relative bg-gray-50 dark:bg-gray-900 rounded-md overflow-hidden`}
         >
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
-              <Skeleton className="w-full h-full" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10 rounded-md">
+              <Skeleton className="w-full h-full absolute inset-0" /> {/* Full-size skeleton */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-500 font-semibold flex items-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin" />
                 Loading Chart...
               </div>
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50 bg-opacity-90 z-10 text-red-700 p-4 rounded-lg text-center">
-              <p className="mb-4">Error loading chart: {error}</p>
-              <Button onClick={refreshData}>Retry</Button>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50 dark:bg-red-950 bg-opacity-90 z-10 text-red-700 dark:text-red-300 p-4 rounded-lg text-center">
+              <p className="mb-4 text-base font-medium">Error loading chart: {error}</p>
+              <Button onClick={refreshData} variant="secondary" className="rounded-md shadow-sm">Retry</Button>
             </div>
           )}
-          {/* The chart will be rendered into chartContainerRef */}
+          {/* The Lightweight Chart will be rendered into this div by the useEffect */}
         </div>
       </Card>
     </div>

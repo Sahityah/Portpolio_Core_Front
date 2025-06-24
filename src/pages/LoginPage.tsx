@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
+// We no longer import authApi directly here, as useAuthStore handles the API calls.
+// import { authApi } from "@/lib/api"; // Removed direct import
+
 import {
   Card,
   CardContent,
@@ -16,147 +19,8 @@ import { Eye, EyeOff, LogIn } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import { AxiosError } from 'axios'; // Import AxiosError for more specific error handling
 
-// Type definition for a user, potentially from a shared types file
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  token: string; // Authentication token
-  avatar?: string | null;
-};
-
-// ===============================================
-// Mock Authentication Store (useAuthStore)
-// This simulates your global authentication state management.
-// In a real application, this would be a separate file (e.e.g, src/store/auth-store.ts)
-// using libraries like Zustand, Redux, or React Context.
-// ===============================================
-
-// Mock user data for successful login
-const MOCK_USER: User = {
-  id: "mockuser123",
-  name: "Mock User",
-  email: "test@example.com",
-  token: "mock-jwt-token-for-test-user",
-  avatar: "https://github.com/shadcn.png", // Corrected URL format
-};
-
-// Mock user data for Google login
-const MOCK_GOOGLE_USER: User = {
-  id: "mockgoogleuser456",
-  name: "Google User",
-  email: "google@example.com",
-  token: "mock-google-jwt-token",
-  avatar: "https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c", // Corrected URL format
-};
-
-// A simple mock auth store using React's useState and useContext-like pattern
-// For a real app, use a dedicated state management library.
-const useAuthStore = (() => {
-  let _user: User | null = null;
-  let _isAuthenticated: boolean = false;
-  let _listeners: Set<() => void> = new Set();
-
-  const getSnapshot = () => ({
-    user: _user,
-    isAuthenticated: _isAuthenticated,
-  });
-
-  const subscribe = (listener: () => void): (() => void) => {
-    _listeners.add(listener);
-    return () => { _listeners.delete(listener); };
-  };
-
-  const publish = () => {
-    _listeners.forEach(listener => listener());
-  };
-
-  const setUserState = (user: User | null) => {
-    _user = user;
-    _isAuthenticated = !!user;
-    if (user) {
-      localStorage.setItem("authToken", user.token);
-      localStorage.setItem("user", JSON.stringify(user)); // Store user data for persistence
-    } else {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("user");
-    }
-    publish();
-  };
-
-  const login = async (email: string, password: string): Promise<void> => {
-    // Simulate API call
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (email === MOCK_USER.email && password === "password123") {
-          setUserState(MOCK_USER);
-          resolve();
-        } else {
-          reject(new AxiosError("Invalid credentials", '401', undefined, undefined, {
-            status: 401,
-            data: { message: "Invalid email or password provided." }
-          } as any));
-        }
-      }, 1000); // Simulate network delay
-    });
-  };
-
-  const loginWithGoogle = async (credential: string): Promise<void> => {
-    // Simulate API call to your backend with the Google credential
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (credential) { // In a real app, you'd send this to your backend for verification
-          setUserState(MOCK_GOOGLE_USER);
-          resolve();
-        } else {
-          reject(new Error("Google authentication failed."));
-        }
-      }, 1500); // Simulate network delay
-    });
-  };
-
-  const logout = () => {
-    setUserState(null);
-  };
-
-  // Rehydrate state from localStorage on initial load
-  const init = () => {
-    const token = localStorage.getItem("authToken");
-    const storedUser = localStorage.getItem("user");
-    if (token && storedUser) {
-      try {
-        _user = JSON.parse(storedUser);
-        _isAuthenticated = true;
-      } catch (e) {
-        console.error("Failed to parse stored user data:", e);
-        logout(); // Clear invalid data
-      }
-    }
-  };
-
-  // Run initialization once
-  if (!_user && !_isAuthenticated && typeof window !== 'undefined') { // Check for window to ensure client-side
-    init();
-  }
-
-  // The actual hook for components
-  return () => {
-    const [state, setState] = useState(getSnapshot());
-
-    useEffect(() => {
-      const listener = () => setState(getSnapshot());
-      const unsubscribe = subscribe(listener);
-      return unsubscribe;
-    }, []);
-
-    return { ...state, login, loginWithGoogle, logout };
-  };
-})();
-
-// ===============================================
-// End of Mock Authentication Store
-// ===============================================
-
+// Import the actual useAuthStore from its dedicated file (the Canvas document)
+import useAuthStore from "@/store/useAuthStore"; // Assuming this path based on typical project structure
 
 // Regular expressions for validation
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -169,11 +33,10 @@ const LoginPage = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  const { login, loginWithGoogle, isAuthenticated } = useAuthStore(); // Use the mock auth store
+  // Use the imported useAuthStore from your store file
+  const { login, loginWithGoogle, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const { toast } = useToast();
-  // We'll manage navigation logic differently, no longer needing `hasNavigated` ref this way.
-  // const hasNavigated = useRef(false); // REMOVE THIS REF
 
   useEffect(() => {
     document.title = "Login - Portfolio Manager";
@@ -333,8 +196,6 @@ const LoginPage = () => {
 
             <form
               onSubmit={handleSubmit}
-              // Removed onKeyDown as it interferes with normal form submission and enter key
-              // It's generally better to rely on onSubmit for form handling.
               className="space-y-4"
             >
               <div>

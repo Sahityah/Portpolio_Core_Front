@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import api from "@/lib/api";
-import { jwtDecode } from "jwt-decode";
+import api from "@/lib/api"; // Assuming this is your Axios instance or similar
+import { jwtDecode } from "jwt-decode"; // Unused in provided snippet, but kept for context
+import { AxiosError } from "axios";
 
 export type User = {
   id: string;
@@ -10,6 +11,8 @@ export type User = {
   avatar: string | null;
   provider?: "email" | "google";
 };
+
+const AUTH_TOKEN_KEY = "token";
 
 interface AuthState {
   user: User | null;
@@ -38,7 +41,7 @@ export const useAuthStore = create<AuthState>()(
           // ✅ Mock Login
           if (email === "test@example.com" && password === "123456") {
             const mockToken = "mock-token";
-            localStorage.setItem("token", mockToken);
+            localStorage.setItem(AUTH_TOKEN_KEY, mockToken);
             set({
               user: {
                 id: "1",
@@ -56,15 +59,19 @@ export const useAuthStore = create<AuthState>()(
 
           // ✅ Actual API login
           const { data } = await api.post("/api/auth/login", { email, password });
-          localStorage.setItem("token", data.token);
+          localStorage.setItem(AUTH_TOKEN_KEY, data.token);
           set({
             user: data.user,
             token: data.token,
             isAuthenticated: true,
             isLoading: false,
           });
-        } catch (error) {
-          const message = (error as any).response?.data?.message || error.message || "Login failed";
+        } catch (error: unknown) {
+          // Properly check error type before accessing properties
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            "Login failed";
           set({ isLoading: false });
           throw new Error(message);
         }
@@ -73,10 +80,9 @@ export const useAuthStore = create<AuthState>()(
       loginWithGoogle: async (credential) => {
         set({ isLoading: true });
         try {
-          // ✅ Mock Google Login
           if (credential === "mock-google-credential") {
             const mockToken = "mock-google-token";
-            localStorage.setItem("token", mockToken);
+            localStorage.setItem(AUTH_TOKEN_KEY, mockToken);
             set({
               user: {
                 id: "2",
@@ -92,17 +98,20 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
 
-          // ✅ Actual Google API login
           const { data } = await api.post("/api/auth/google-login", { credential });
-          localStorage.setItem("token", data.token);
+          localStorage.setItem(AUTH_TOKEN_KEY, data.token);
           set({
             user: data.user,
             token: data.token,
             isAuthenticated: true,
             isLoading: false,
           });
-        } catch (error) {
-          const message = (error as any).response?.data?.message || error.message || "Google login failed";
+        } catch (error: unknown) {
+          // Properly check error type before accessing properties
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            "Google login failed";
           set({ isLoading: false });
           throw new Error(message);
         }
@@ -112,15 +121,19 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           const { data } = await api.post("/api/auth/register", { name, email, password });
-          localStorage.setItem("token", data.token);
+          localStorage.setItem(AUTH_TOKEN_KEY, data.token);
           set({
             user: data.user,
             token: data.token,
             isAuthenticated: true,
             isLoading: false,
           });
-        } catch (error) {
-          const message = (error as any).response?.data?.message || error.message || "Registration failed";
+        } catch (error: unknown) {
+          // Properly check error type before accessing properties
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            "Registration failed";
           set({ isLoading: false });
           throw new Error(message);
         }
@@ -128,18 +141,30 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
-        localStorage.removeItem("token");
-        localStorage.removeItem("auth-store");
-        
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem("auth-store"); // Also clear the persist store
       },
 
       updateProfile: async (userData) => {
         set({ isLoading: true });
         try {
+          // ✅ Mock update
+          if (userData.email === "mock-update@example.com") {
+              set((state) => ({
+                  user: state.user ? { ...state.user, ...userData } : state.user,
+                  isLoading: false,
+              }));
+              return;
+          }
+
           const { data } = await api.put("/api/auth/profile", userData);
           set({ user: data, isLoading: false });
-        } catch (error) {
-          const message = (error as any).response?.data?.message || error.message || "Failed to update profile";
+        } catch (error: unknown) {
+          // Properly check error type before accessing properties
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            "Failed to update profile";
           set({ isLoading: false });
           throw new Error(message);
         }

@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+// Removed Link and useNavigate as they are not used in the DashboardPage logic provided.
+// import { Link, useNavigate } from "react-router-dom";
 // REMOVE THIS LINE: DashboardLayout is no longer directly imported and wrapped here
 // import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
@@ -24,7 +26,8 @@ import {
   TrendingDown,
   Percent
 } from "lucide-react";
-import { useIsMobile } from "@/hooks/use-mobile";
+// Assuming useIsMobile is still relevant if you have mobile-specific logic, though not directly used in this snippet.
+// import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCurrency } from "@/lib/currency";
 import { SecuritiesSearch } from "@/components/SecuritiesSearch";
 import { ReportDownload } from "@/components/ReportDownload";
@@ -105,16 +108,16 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
 
 // Helper function to format large numbers for Y-axis (e.g., for Lakhs, Crores)
 const formatValueForChart = (value: number) => {
-    if (Math.abs(value) >= 10000000) { // Crore
-        return `₹${(value / 10000000).toFixed(2)} Cr`;
-    }
-    if (Math.abs(value) >= 100000) { // Lakh
-        return `₹${(value / 100000).toFixed(2)} L`;
-    }
-    if (Math.abs(value) >= 1000) { // Thousand
-        return `₹${(value / 1000).toFixed(2)} K`;
-    }
-    return `₹${value.toFixed(0)}`;
+  if (Math.abs(value) >= 10000000) { // Crore
+    return `₹${(value / 10000000).toFixed(2)} Cr`;
+  }
+  if (Math.abs(value) >= 100000) { // Lakh
+    return `₹${(value / 100000).toFixed(2)} L`;
+  }
+  if (Math.abs(value) >= 1000) { // Thousand
+    return `₹${(value / 1000).toFixed(2)} K`;
+  }
+  return `₹${value.toFixed(0)}`;
 };
 
 
@@ -141,7 +144,7 @@ const DashboardPage = () => {
     setLoading(true); // Start loading
     setError(null);    // Clear previous errors
     try {
-      const response = await portfolioApi.getPortfolio();
+      const response = await portfolioApi.getPortfolio(); // This call will now include JWT via interceptor
       setPortfolioData(response.data);
     } catch (err: any) {
       console.error("Failed to fetch portfolio data:", err);
@@ -153,15 +156,14 @@ const DashboardPage = () => {
 
   const fetchPnlChartData = useCallback(async () => {
     try {
-      // Assuming marketApi.getChartData can fetch aggregated portfolio P&L data
-      // You might need a dedicated endpoint like portfolioApi.getPnlChartData() on backend
-      const response = await marketApi.getChartData("portfolio", "all"); // "portfolio" as symbol, "all" for periods
+      // Changed from marketApi.getChartData to portfolioApi.getPnlChartData as per user's comment
+      const response = await portfolioApi.getPnlChartData(chartPeriod);
       setPnlChartData(response.data);
     } catch (err: any) {
       console.error("Failed to fetch P&L chart data:", err);
       // Specific error handling for chart if needed, or rely on global error state if critical
     }
-  }, []);
+  }, [chartPeriod]); // Dependency on chartPeriod
 
   useEffect(() => {
     const fetchAndSetIndices = async () => {
@@ -204,6 +206,7 @@ const DashboardPage = () => {
       case "monthly":
         return pnlChartData.monthly;
       case "yearly":
+      case "all": // If "all" period is meant for yearly, keep it here. Otherwise, add a separate case or default.
         return pnlChartData.yearly;
       case "daily":
       default:

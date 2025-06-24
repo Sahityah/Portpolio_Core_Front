@@ -11,22 +11,21 @@ type User = {
   avatar?: string | null;
 };
 
-// Mock user data for successful login
+// Mock user data
 const MOCK_USER: User = {
   id: "mockuser123",
   name: "Mock User",
   email: "test@example.com",
-  token: "mock-jwt-token-for-test-user",
-  avatar: "https://github.com/shadcn.png", // Corrected URL format
+  token: "mock-jwt-token",
+  avatar: "https://github.com/shadcn.png",
 };
 
-// Mock user data for Google login
 const MOCK_GOOGLE_USER: User = {
   id: "mockgoogleuser456",
   name: "Google User",
   email: "google@example.com",
   token: "mock-google-jwt-token",
-  avatar: "https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c", // Corrected URL format
+  avatar: "https://lh3.googleusercontent.com/a/default-photo=s96-c",
 };
 
 // Toggle mock vs real backend mode (optionally via .env)
@@ -83,9 +82,9 @@ const useAuthStore = (() => {
             resolve();
           } else {
             reject(
-              new AxiosError("Invalid credentials", '401', undefined, undefined, {
+              new AxiosError("Invalid credentials", "401", undefined, undefined, {
                 status: 401,
-                data: { message: "Invalid email or password provided." }
+                data: { message: "Invalid email or password." },
               } as any)
             );
           }
@@ -117,55 +116,14 @@ const useAuthStore = (() => {
             setUserState(MOCK_GOOGLE_USER);
             resolve();
           } else {
-            reject(new Error("Google authentication failed."));
+            reject(new Error("Google login failed."));
           }
-        }, 1500);
+        }, 1000);
       });
     } else {
       // This line was causing the previous error as authApi.googleLogin didn't exist.
       // Assuming you've added it to authApi or adjusted your call as per previous instructions.
       const response = await authApi.googleLogin(credential);
-      const { token, user: userData } = response.data;
-
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
-
-      setUserState(user);
-    }
-  };
-
-  // Handles user registration
-  const register = async (name: string, email: string, password: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (name && email && password) {
-            // For mock, simply simulate a new user
-            const newUser: User = {
-              id: `mock-${Date.now()}`,
-              name,
-              email,
-              token: `mock-jwt-token-${Date.now()}`,
-              avatar: null,
-            };
-            setUserState(newUser);
-            resolve();
-          } else {
-            reject(new AxiosError("Registration failed. Missing fields.", '400', undefined, undefined, {
-              status: 400,
-              data: { message: "All fields are required for registration." }
-            } as any));
-          }
-        }, 1000);
-      });
-    } else {
-      // Calls the real backend API for registration
-      const response = await authApi.register({ name, email, password });
       const { token, user: userData } = response.data;
 
       const user: User = {
@@ -194,18 +152,18 @@ const useAuthStore = (() => {
         _user = JSON.parse(storedUser);
         _isAuthenticated = true;
       } catch (e) {
-        console.error("Failed to parse stored user data:", e);
+        console.error("Failed to parse stored user data", e);
         logout(); // Clear corrupted data
       }
     }
   };
 
-  // Run initialization once
-  if (!_user && !_isAuthenticated && typeof window !== 'undefined') { // Check for window to ensure client-side
+  // Initialize the store only once when the module is loaded (server-side check)
+  if (!_user && typeof window !== "undefined") {
     init();
   }
 
-  // The actual hook for components
+  // The React Hook part of the custom store
   return () => {
     const [state, setState] = useState(getSnapshot());
 
@@ -217,8 +175,7 @@ const useAuthStore = (() => {
     }, []); // Empty dependency array ensures this runs once on mount
 
     // Returns the current state and actions to components
-    // Added 'register' to the exposed functions
-    return { ...state, login, loginWithGoogle, register, logout };
+    return { ...state, login, loginWithGoogle, logout };
   };
 })(); // IIFE to create the singleton instance
 

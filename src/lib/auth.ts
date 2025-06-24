@@ -1,4 +1,4 @@
-import jwtDecode from "jwt-decode";
+import {jwtDecode} from "jwt-decode";
 import { useAuthStore } from "@/store/auth-store";
 
 export const checkAuthOnLoad = () => {
@@ -14,6 +14,7 @@ export const checkAuthOnLoad = () => {
           isAuthenticated: true,
           token: state.token,
           user: state.user,
+
         });
       }
     }
