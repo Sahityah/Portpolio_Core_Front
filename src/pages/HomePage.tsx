@@ -27,22 +27,24 @@ const HomePage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const formatTime = () => {
+  // Enhancement: Wrap in React.useCallback for memoization
+  const formatTime = React.useCallback(() => {
     return currentTime.toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
     });
-  };
+  }, [currentTime]); // Dependency on currentTime
 
-  const formatDate = () => {
+  // Enhancement: Wrap in React.useCallback for memoization
+  const formatDate = React.useCallback(() => {
     return currentTime.toLocaleDateString(undefined, {
       weekday: "long",
       year: "numeric",
       month: "long",
       day: "numeric"
     });
-  };
+  }, [currentTime]); // Dependency on currentTime
 
   const features = [
     {
@@ -68,7 +70,7 @@ const HomePage: React.FC = () => {
       description:
         "Quickly switch to the home dashboard overview for a consolidated view of your global portfolio in a single click.",
       icon: Shield,
-      action: "/"
+      action: "/dashboard" // Enhancement: Changed from "/" to "/dashboard"
     }
   ];
 
@@ -143,6 +145,7 @@ const HomePage: React.FC = () => {
               src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop"
               alt="Portfolio Management Dashboard"
               className="rounded-lg shadow-xl w-full"
+              loading="lazy" // Enhancement: Added lazy loading
             />
           </div>
         </div>
@@ -158,7 +161,8 @@ const HomePage: React.FC = () => {
             {features.map((feature, index) => (
               <Card
                 key={index}
-                className="portfolio-card cursor-pointer hover:shadow-lg transition"
+                // Enhancement: Only apply cursor-pointer if action exists
+                className={`portfolio-card ${feature.action ? "cursor-pointer hover:shadow-lg transition" : ""}`}
                 onClick={() => {
                   if (feature.action) navigate(feature.action);
                 }}
@@ -195,6 +199,7 @@ const HomePage: React.FC = () => {
               src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&h=600&fit=crop"
               alt="Dashboard Preview"
               className="rounded-xl shadow-xl w-full"
+              loading="lazy" // Enhancement: Added lazy loading
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent rounded-xl flex items-end">
               <div className="p-6 md:p-10 text-white">

@@ -15,16 +15,23 @@ import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import { GoogleLogin } from "@react-oauth/google";
-import { debounce } from "lodash";
+// import { debounce } from "lodash"; // We can simplify without explicit debounce for this use case
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.(com|in|net|org)$/i;
+import { AxiosError } from 'axios'; // Import AxiosError for more specific error handling
+
+// Enhanced Email Regex: More robust for common email formats
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+// For login, password minimum length should align with what the backend accepts,
+// typically matching the registration minimum. If registration is 8+, make this 8+.
+const MIN_PASSWORD_LENGTH = 8; // Consistent with RegisterPage's strong password validation
+
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [showGoogleLogin, setShowGoogleLogin] = useState(true);
+  // const [showGoogleLogin, setShowGoogleLogin] = useState(true); // Retaining, but if always true, can be removed
 
   const login = useAuthStore((state) => state.login);
   const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
@@ -39,31 +46,31 @@ const LoginPage = () => {
   }, []);
 
   useEffect(() => {
+    // Only navigate if isAuthenticated becomes true AND we haven't navigated yet
     if (isAuthenticated && !hasNavigated.current) {
-      hasNavigated.current = true;
+      hasNavigated.current = true; // Set ref to true to prevent future navigations
       navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate]); // Depend on isAuthenticated and navigate
 
-  const validateEmail = useRef(
-    debounce((email: string) => {
-      if (!email) {
-        setErrors((prev) => ({ ...prev, email: "Email is required" }));
-      } else if (!emailRegex.test(email)) {
-        setErrors((prev) => ({ ...prev, email: "Invalid email address" }));
-      } else {
-        setErrors((prev) => ({ ...prev, email: undefined }));
-      }
-    }, 300)
-  ).current;
+  // Removed debounced validation for simplicity in handleChange,
+  // relying on `validate` for final submission check.
+  // Real-time validation can be done directly if simple enough, or through a custom hook.
 
   const validate = () => {
     const newErrors: { email?: string; password?: string } = {};
 
-    if (!formData.email) newErrors.email = "Email is required";
-    if (!formData.password) newErrors.password = "Password is required";
-    else if (formData.password.length < 6)
-      newErrors.password = "Password must be at least 6 characters";
+    if (!formData.email) {
+      newErrors.email = "Email is required";
+    } else if (!emailRegex.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address.";
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < MIN_PASSWORD_LENGTH) {
+      newErrors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -73,13 +80,16 @@ const LoginPage = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
 
-    if (name === "email") validateEmail(value);
-    if (name === "password") setErrors((prev) => ({ ...prev, password: undefined }));
+    // Clear specific error message as user types
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) return; // Run full validation on submit
+
     setIsLoading(true);
 
     try {
@@ -88,11 +98,23 @@ const LoginPage = () => {
         title: "Login successful",
         description: "Welcome back to your portfolio dashboard",
       });
-      navigate("/dashboard");
+      // Navigation is handled by the useEffect based on isAuthenticated
     } catch (error) {
+      // Enhancement: More specific error messages from backend
+      let description = "Invalid credentials. Please try again.";
+      if (error instanceof AxiosError) {
+        if (error.response?.data?.message) {
+          description = error.response.data.message;
+        } else if (error.response?.status === 401) {
+          description = "Invalid email or password.";
+        }
+      } else if (error instanceof Error) {
+        description = error.message; // Fallback for generic JS errors
+      }
+
       toast({
         title: "Login failed",
-        description: "Invalid credentials. Please try again.",
+        description: description,
         variant: "destructive",
       });
     } finally {
@@ -101,12 +123,14 @@ const LoginPage = () => {
   };
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
+    setIsLoading(true); // Set loading state for Google login as well
     if (!credentialResponse.credential) {
       toast({
         title: "Google login failed",
         description: "No credential received from Google.",
         variant: "destructive",
       });
+      setIsLoading(false); // Reset loading state
       return;
     }
     try {
@@ -115,13 +139,22 @@ const LoginPage = () => {
         title: "Google login successful",
         description: "Welcome!",
       });
-      navigate("/dashboard");
+      // Navigation is handled by the useEffect based on isAuthenticated
     } catch (error) {
+      // Enhancement: More specific error messages from backend
+      let description = "Problem authenticating with Google. Please try again.";
+      if (error instanceof AxiosError && error.response?.data?.message) {
+        description = error.response.data.message;
+      } else if (error instanceof Error) {
+        description = error.message;
+      }
       toast({
         title: "Google login failed",
-        description: "Problem authenticating with Google.",
+        description: description,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false); // Reset loading state
     }
   };
 
@@ -137,39 +170,36 @@ const LoginPage = () => {
 
         <CardContent>
           <div className="space-y-4">
-            {showGoogleLogin && (
-              <>
-                <div className={isLoading ? "pointer-events-none opacity-60" : ""}>
-                  <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() =>
-                      toast({
-                        title: "Google login failed",
-                        description: "Please try again.",
-                        variant: "destructive",
-                      })
-                    }
-                    useOneTap
-                    shape="rectangular"
-                    theme="outline"
-                    locale="en"
-                    size="large"
-                    width="320"
-                  />
-                </div>
+            {/* showGoogleLogin check is currently redundant if always true, consider removing or adding logic */}
+            <div className={isLoading ? "pointer-events-none opacity-60" : ""}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() =>
+                  toast({
+                    title: "Google login failed",
+                    description: "Please try again.",
+                    variant: "destructive",
+                  })
+                }
+                useOneTap
+                shape="rectangular"
+                theme="outline"
+                locale="en"
+                size="large"
+                width="320"
+              />
+            </div>
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      or continue with email
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  or continue with email
+                </span>
+              </div>
+            </div>
 
             <form
               onSubmit={handleSubmit}
@@ -188,8 +218,9 @@ const LoginPage = () => {
                   disabled={isLoading}
                   autoComplete="email"
                   aria-invalid={!!errors.email}
+                  autoFocus // Enhancement: Auto-focus on first input
                 />
-                {errors.email && <p className="text-red-500 text-xs">{errors.email}</p>}
+                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
               </div>
 
               <div>
@@ -209,7 +240,7 @@ const LoginPage = () => {
                     onChange={handleChange}
                     disabled={isLoading}
                     autoComplete="current-password"
-                    aria-invalid={!!errors.password}
+                    aria-invalid={!!errors.password} // Enhancement: Add aria-invalid
                   />
                   <Button
                     type="button"
@@ -217,11 +248,13 @@ const LoginPage = () => {
                     size="icon"
                     className="absolute right-0 top-0 h-full px-3"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"} // Enhancement: Add aria-label
+                    aria-pressed={showPassword} // Enhancement: Add aria-pressed
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                {errors.password && <p className="text-red-500 text-xs">{errors.password}</p>}
+                {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
               </div>
 
               <Button type="submit" className="w-full" disabled={isLoading}>

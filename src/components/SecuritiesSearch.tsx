@@ -1,43 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { 
-  Command, 
-  CommandEmpty, 
-  CommandGroup, 
-  CommandInput, 
-  CommandItem, 
-  CommandList 
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
 } from "@/components/ui/command";
 import { Search, Loader2 } from "lucide-react";
-
-// Mock securities data - in a real app, this would come from an API
-const EQUITIES = [
-  { symbol: "RELIANCE", name: "Reliance Industries Ltd", type: "equity" },
-  { symbol: "TCS", name: "Tata Consultancy Services Ltd", type: "equity" },
-  { symbol: "HDFCBANK", name: "HDFC Bank Ltd", type: "equity" },
-  { symbol: "INFY", name: "Infosys Ltd", type: "equity" },
-  { symbol: "ICICIBANK", name: "ICICI Bank Ltd", type: "equity" },
-  { symbol: "KOTAKBANK", name: "Kotak Mahindra Bank Ltd", type: "equity" },
-  { symbol: "HINDUNILVR", name: "Hindustan Unilever Ltd", type: "equity" },
-  { symbol: "SBIN", name: "State Bank of India", type: "equity" },
-  { symbol: "BHARTIARTL", name: "Bharti Airtel Ltd", type: "equity" },
-  { symbol: "ITC", name: "ITC Ltd", type: "equity" },
-];
-
-const FNO = [
-  { symbol: "NIFTY", name: "NIFTY Index", type: "index" },
-  { symbol: "BANKNIFTY", name: "BANK NIFTY Index", type: "index" },
-  { symbol: "RELIANCE", name: "Reliance Industries Ltd", type: "fno" },
-  { symbol: "TCS", name: "Tata Consultancy Services Ltd", type: "fno" },
-  { symbol: "HDFCBANK", name: "HDFC Bank Ltd", type: "fno" },
-  { symbol: "INFY", name: "Infosys Ltd", type: "fno" },
-  { symbol: "ICICIBANK", name: "ICICI Bank Ltd", type: "fno" },
-];
+import { securitiesApi } from "@/lib/api"; // Import your centralized API client
+import { useClickOutside } from "@/hooks/useClickOutside"; // Custom hook for outside clicks
+import { debounce } from "lodash"; // For debouncing search input
 
 interface Security {
   symbol: string;
   name: string;
-  type: string;
+  type: string; // e.g., "equity", "fno", "index"
 }
 
 interface SecuritiesSearchProps {
@@ -47,9 +26,9 @@ interface SecuritiesSearchProps {
   className?: string;
 }
 
-export function SecuritiesSearch({ 
-  onSelect, 
-  segment = 'all', 
+export function SecuritiesSearch({
+  onSelect,
+  segment = 'all',
   placeholder = "Search securities...",
   className = ""
 }: SecuritiesSearchProps) {
@@ -57,83 +36,107 @@ export function SecuritiesSearch({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Security[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [hasSearched, setHasSearched] = useState(false); // To distinguish between initial and no results
+  const containerRef = useRef<HTMLDivElement>(null); // Ref for detecting clicks outside
 
-  // Filter securities based on segment prop
-  const getSecuritiesBySegment = (): Security[] => {
-    switch (segment) {
-      case 'equity':
-        return EQUITIES;
-      case 'fno':
-        return FNO;
-      case 'all':
-      default:
-        return [...EQUITIES, ...FNO];
-    }
-  };
+  // Custom hook to close dropdown when clicking outside
+  useClickOutside(containerRef, () => setIsOpen(false));
 
-  useEffect(() => {
-    if (query.length >= 2) {
-      setIsLoading(true);
-      
-      // Simulate API call delay
-      const timer = setTimeout(() => {
-        const filteredResults = getSecuritiesBySegment().filter((item) => 
-          item.symbol.toLowerCase().includes(query.toLowerCase()) || 
-          item.name.toLowerCase().includes(query.toLowerCase())
-        );
-        setResults(filteredResults);
+  // Debounce the API call to avoid excessive requests
+  const debouncedSearch = useRef(
+    debounce(async (searchQuery: string) => {
+      if (searchQuery.length < 2) {
+        setResults([]);
         setIsLoading(false);
-      }, 300);
-      
-      return () => clearTimeout(timer);
-    } else {
-      setResults([]);
-    }
-  }, [query, segment]);
+        setHasSearched(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setHasSearched(true); // Indicate that a search has been attempted
+      try {
+        // Call your backend API for securities search
+        // The segment prop can be passed to the backend for filtering
+        const response = await securitiesApi.search(searchQuery, segment);
+        setResults(response.data); // Assuming response.data is an array of Security
+      } catch (error) {
+        console.error("Failed to fetch securities:", error);
+        setResults([]); // Clear results on error
+        // Optionally, show a toast or error message to the user
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300) // Debounce for 300ms
+  ).current;
+
+  // Effect to trigger debounced search when query changes
+  useEffect(() => {
+    debouncedSearch(query);
+    // Cleanup debounce on component unmount
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [query, segment, debouncedSearch]); // Include debouncedSearch in dependencies
 
   const handleSelect = (security: Security) => {
     onSelect(security);
     setIsOpen(false);
-    setQuery("");
-    inputRef.current?.blur();
+    setQuery(""); // Clear query after selection
+    // inputRef.current?.blur(); // No need to blur, Command handles it
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    setIsOpen(true); // Open dropdown when typing
   };
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative ${className}`} ref={containerRef}>
       <div className="relative">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <Input
-          ref={inputRef}
           type="text"
           placeholder={placeholder}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={handleInputChange}
           onFocus={() => setIsOpen(true)}
           className="pl-8"
+          role="combobox" // ARIA role for a combobox
+          aria-autocomplete="list" // Indicates that the input suggests completions
+          aria-expanded={isOpen} // Indicates if the pop-up is visible
+          aria-controls="security-search-list" // Connects to the CommandList ID
         />
       </div>
-      
-      {isOpen && (query.length >= 2 || results.length > 0) && (
+
+      {/* Render dropdown only if open and query is long enough OR results exist (from previous search) */}
+      {isOpen && (query.length >= 2 || (hasSearched && results.length === 0) || (results.length > 0)) && (
         <div className="absolute z-50 w-full mt-1">
-          <Command className="rounded-lg border shadow-md">
-            <CommandInput placeholder="Search securities..." value={query} onValueChange={setQuery} />
+          <Command className="rounded-lg border shadow-md" id="security-search-list">
+            {/* CommandInput here is primarily for visual consistency if needed, actual typing goes to <Input> */}
+            {/* If you want CommandInput to handle typing, remove the above <Input> and pass props here */}
+            {/* For now, it's decorative or for screen readers to confirm search text */}
+            <CommandInput value={query} onValueChange={setQuery} className="hidden" />
+
             <CommandList>
               {isLoading ? (
-                <div className="py-6 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                <div className="py-6 text-center" role="status" aria-live="polite">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" aria-hidden="true" />
                   <p className="text-sm text-muted-foreground mt-2">Searching securities...</p>
                 </div>
               ) : (
                 <>
-                  <CommandEmpty>No results found</CommandEmpty>
-                  {results.length > 0 && (
+                  {hasSearched && results.length === 0 ? (
+                    <CommandEmpty>No results found for "{query}"</CommandEmpty>
+                  ) : query.length < 2 && !hasSearched ? (
+                    <CommandEmpty>Type at least 2 characters to search.</CommandEmpty>
+                  ) : (
                     <CommandGroup heading="Securities">
                       {results.map((security) => (
                         <CommandItem
                           key={`${security.symbol}-${security.type}`}
-                          value={`${security.symbol}-${security.name}`}
+                          value={`${security.symbol} ${security.name}`} // Use a more descriptive value for command
                           onSelect={() => handleSelect(security)}
+                          aria-label={`${security.symbol}: ${security.name} (${security.type === 'equity' ? 'Equity' : security.type === 'fno' ? 'Futures & Options' : 'Index'})`}
                         >
                           <div className="flex flex-col">
                             <span className="font-medium">{security.symbol}</span>

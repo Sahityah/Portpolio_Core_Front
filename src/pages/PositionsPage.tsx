@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import React, { useState, useEffect, useCallback } from "react";
+// import DashboardLayout from "@/components/layout/DashboardLayout"; // <--- REMOVE THIS IMPORT
 import { Card } from "@/components/ui/card";
 import { TableHead, TableRow, TableHeader, TableCell, TableBody, Table } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { SecuritiesSearch } from "@/components/SecuritiesSearch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { ReportDownload } from "@/components/ReportDownload";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -35,75 +35,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-// Mock positions data
-const positionsData = [
-  { 
-    id: "pos1", 
-    symbol: "NIFTY", 
-    strike: "18000 CE", 
-    type: "CALL", 
-    segment: "fno",
-    qty: 75, 
-    entryPrice: 12050, 
-    ltp: 13725, 
-    pnl: 125625, 
-    mtm: 125625,
-    status: "active" 
-  },
-  { 
-    id: "pos2", 
-    symbol: "BANKNIFTY", 
-    strike: "44000 PUT", 
-    type: "PUT", 
-    segment: "fno",
-    qty: 75, 
-    entryPrice: 13750, 
-    ltp: 13725, 
-    pnl: 405000, 
-    mtm: 15255,
-    status: "active"
-  },
-  { 
-    id: "pos3", 
-    symbol: "RELIANCE", 
-    strike: "2400", 
-    type: "EQ", 
-    segment: "equity",
-    qty: 50, 
-    entryPrice: 2385.5, 
-    ltp: 2450.75, 
-    pnl: 326250, 
-    mtm: 13660,
-    status: "active"
-  },
-  { 
-    id: "pos4", 
-    symbol: "TATAMOTOR", 
-    strike: "675", 
-    type: "EQ", 
-    segment: "equity",
-    qty: 100, 
-    entryPrice: 635.55, 
-    ltp: 622.15, 
-    pnl: -133000, 
-    mtm: 62215,
-    status: "closed"
-  },
-  { 
-    id: "pos5", 
-    symbol: "INFY", 
-    strike: "1480", 
-    type: "EQ", 
-    segment: "equity",
-    qty: 75, 
-    entryPrice: 1500.05, 
-    ltp: 1474.45, 
-    pnl: -191250, 
-    mtm: 110584,
-    status: "active"
-  }
-];
-
+// Define the Position interface
 interface Position {
   id: string;
   symbol: string;
@@ -118,8 +50,56 @@ interface Position {
   status: string;
 }
 
+// Mock API functions (replace with actual fetch calls)
+const API_BASE_URL = "/api"; // Replace with your actual backend API base URL
+
+const fetchPositionsFromBackend = async (): Promise<Position[]> => {
+  await new Promise(resolve => setTimeout(resolve, 800));
+  const mockData = [
+    {
+      id: "pos1", symbol: "NIFTY", strike: "18000 CE", type: "CALL", segment: "fno",
+      qty: 75, entryPrice: 12050, ltp: 13725, pnl: 125625, mtm: 125625, status: "active"
+    },
+    {
+      id: "pos2", symbol: "BANKNIFTY", strike: "44000 PUT", type: "PUT", segment: "fno",
+      qty: 75, entryPrice: 13750, ltp: 13725, pnl: 405000, mtm: 15255, status: "active"
+    },
+    {
+      id: "pos3", symbol: "RELIANCE", strike: "2400", type: "EQ", segment: "equity",
+      qty: 50, entryPrice: 2385.5, ltp: 2450.75, pnl: 326250, mtm: 13660, status: "active"
+    },
+    {
+      id: "pos4", symbol: "TATAMOTOR", strike: "675", type: "EQ", segment: "equity",
+      qty: 100, entryPrice: 635.55, ltp: 622.15, pnl: -133000, mtm: 62215, status: "closed"
+    },
+    {
+      id: "pos5", symbol: "INFY", strike: "1480", type: "EQ", segment: "equity",
+      qty: 75, entryPrice: 1500.05, ltp: 1474.45, pnl: -191250, mtm: 110584, status: "active"
+    }
+  ];
+  return mockData;
+};
+
+const addPositionToBackend = async (newPositionData: Omit<Position, 'id' | 'pnl' | 'ltp' | 'mtm' | 'status'>): Promise<Position> => {
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const newId = `pos${Math.random().toString(36).substring(2, 9)}`;
+  const ltp = newPositionData.entryPrice;
+  const mtm = newPositionData.entryPrice * newPositionData.qty;
+  return {
+    id: newId,
+    ...newPositionData,
+    ltp: ltp,
+    pnl: 0,
+    mtm: mtm,
+    status: "active"
+  };
+};
+
 const PositionsPage = () => {
-  const [positions, setPositions] = useState<Position[]>(positionsData);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedSegment, setSelectedSegment] = useState("all");
@@ -135,37 +115,54 @@ const PositionsPage = () => {
   });
   const [positionType, setPositionType] = useState("equity");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const isMobile = useIsMobile();
   const { toast } = useToast();
 
-  // Filter positions based on search, status and segment
+  const fetchPositions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchPositionsFromBackend();
+      setPositions(data);
+    } catch (err) {
+      console.error("Failed to fetch positions:", err);
+      setError("Failed to load positions. Please try again.");
+      toast({
+        title: "Error",
+        description: "Failed to load positions.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchPositions();
+  }, [fetchPositions]);
+
   const filteredPositions = positions.filter(position => {
-    // Search filter
-    const matchesSearch = 
+    const matchesSearch =
       position.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      position.strike.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (position.strike && position.strike.toLowerCase().includes(searchTerm.toLowerCase())) ||
       position.type.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Status filter
+
     const matchesStatus = selectedStatus === "all" || position.status === selectedStatus;
-    
-    // Segment filter
     const matchesSegment = selectedSegment === "all" || position.segment === selectedSegment;
-    
+
     return matchesSearch && matchesStatus && matchesSegment;
   });
 
-  const handleSecuritySelect = (security: any) => {
+  const handleSecuritySelect = (security: { symbol: string; name: string; type: 'equity' | 'fno' }) => {
     setNewPosition({
       ...newPosition,
       symbol: security.symbol,
       name: security.name,
-      segment: security.type === 'equity' ? 'equity' : 'fno'
+      segment: security.type === 'equity' ? 'equity' : 'fno',
+      type: security.type === 'equity' ? 'EQ' : newPosition.type
     });
-    
-    // Update position type based on selected security
-    setPositionType(security.type === 'equity' ? 'equity' : 'fno');
+    setPositionType(security.type);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,14 +178,25 @@ const PositionsPage = () => {
     setNewPosition({
       ...newPosition,
       segment: value,
-      // Reset fields that differ between segment types
-      strike: value === 'fno' ? '' : newPosition.strike,
+      strike: value === 'fno' ? '' : '',
       type: value === 'fno' ? '' : 'EQ'
     });
   };
 
+  const resetNewPositionForm = () => {
+    setNewPosition({
+      symbol: "",
+      name: "",
+      type: "",
+      segment: "equity",
+      strike: "",
+      qty: "",
+      entryPrice: ""
+    });
+    setPositionType("equity");
+  };
+
   const handleAddPosition = async () => {
-    // Validate required fields
     if (!newPosition.symbol || !newPosition.qty || !newPosition.entryPrice) {
       toast({
         title: "Missing information",
@@ -198,50 +206,42 @@ const PositionsPage = () => {
       return;
     }
 
+    if (positionType === 'fno' && (!newPosition.type || !newPosition.strike)) {
+        toast({
+            title: "Missing F&O details",
+            description: "Please select option type and enter strike price for F&O positions.",
+            variant: "destructive"
+        });
+        return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Create new position object
-      const position: Position = {
-        id: `pos${positions.length + 1}`,
+      const positionToAdd: Omit<Position, 'id' | 'pnl' | 'ltp' | 'mtm' | 'status'> = {
         symbol: newPosition.symbol,
-        strike: positionType === 'equity' ? newPosition.entryPrice : newPosition.strike,
-        type: positionType === 'equity' ? 'EQ' : (newPosition.type || 'CALL'),
+        strike: positionType === 'equity' ? String(newPosition.entryPrice) : newPosition.strike,
+        type: positionType === 'equity' ? 'EQ' : newPosition.type,
         segment: positionType,
         qty: parseInt(newPosition.qty),
         entryPrice: parseFloat(newPosition.entryPrice),
-        ltp: parseFloat(newPosition.entryPrice), // Assume same as entry price initially
-        pnl: 0, // Initial P&L is zero
-        mtm: parseFloat(newPosition.entryPrice) * parseInt(newPosition.qty),
-        status: "active"
       };
 
-      // Add to positions list
-      setPositions([position, ...positions]);
-      
-      // Close dialog and reset form
+      const addedPosition = await addPositionToBackend(positionToAdd);
+
+      setPositions((prevPositions) => [addedPosition, ...prevPositions]);
       setIsNewPositionDialogOpen(false);
-      setNewPosition({
-        symbol: "",
-        name: "",
-        type: "",
-        segment: "equity",
-        strike: "",
-        qty: "",
-        entryPrice: ""
-      });
-      
+      resetNewPositionForm();
+
       toast({
         title: "Position added",
-        description: `${position.symbol} ${position.type} position has been added successfully`,
+        description: `${addedPosition.symbol} ${addedPosition.type} position has been added successfully`,
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error adding position:", error);
       toast({
         title: "Failed to add position",
-        description: "An error occurred while adding the position",
+        description: error.message || "An error occurred while adding the position",
         variant: "destructive"
       });
     } finally {
@@ -250,13 +250,13 @@ const PositionsPage = () => {
   };
 
   return (
-    <DashboardLayout>
+    // <DashboardLayout>  <--- REMOVE THIS LINE
       <div className="container mx-auto py-6 px-4 md:px-6 max-w-7xl">
         <div className="flex flex-col space-y-6">
           {/* Header and Filters */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <h1 className="text-2xl font-bold">Positions</h1>
-            
+
             <div className="flex flex-col md:flex-row gap-4 md:items-center">
               {/* Search */}
               <div className="relative w-full md:w-64">
@@ -269,7 +269,7 @@ const PositionsPage = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              
+
               {/* Status filter */}
               <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                 <SelectTrigger className="w-full md:w-[180px]">
@@ -284,7 +284,7 @@ const PositionsPage = () => {
                   <SelectItem value="closed">Closed Only</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               {/* Add new button */}
               <Button className="w-full md:w-auto" onClick={() => setIsNewPositionDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -292,7 +292,7 @@ const PositionsPage = () => {
               </Button>
             </div>
           </div>
-          
+
           {/* Segment Tabs */}
           <Tabs defaultValue="all" onValueChange={setSelectedSegment}>
             <TabsList className="grid w-full grid-cols-3 mb-4">
@@ -301,22 +301,22 @@ const PositionsPage = () => {
               <TabsTrigger value="fno">F&O</TabsTrigger>
             </TabsList>
           </Tabs>
-          
+
           {/* Positions Table */}
           <Card className="portfolio-card">
             <div className="flex justify-between items-center mb-4 px-4 pt-4">
               <h2 className="text-lg font-semibold">
-                {selectedSegment === 'all' 
-                  ? 'All Positions' 
-                  : selectedSegment === 'equity' 
-                    ? 'Equity Positions' 
+                {selectedSegment === 'all'
+                  ? 'All Positions'
+                  : selectedSegment === 'equity'
+                    ? 'Equity Positions'
                     : 'F&O Positions'}
               </h2>
-              
+
               {/* Report Download Component */}
               <ReportDownload positions={filteredPositions} />
             </div>
-            
+
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -334,7 +334,19 @@ const PositionsPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPositions.length > 0 ? (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                        Loading positions...
+                      </TableCell>
+                    </TableRow>
+                  ) : error ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-8 text-red-500">
+                        {error}
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredPositions.length > 0 ? (
                     filteredPositions.map((position) => (
                       <TableRow key={position.id} className="position-row">
                         <TableCell className="font-medium">{position.symbol}</TableCell>
@@ -377,18 +389,18 @@ const PositionsPage = () => {
               <h3 className="text-sm font-medium text-muted-foreground">Total Positions</h3>
               <div className="mt-2 text-2xl font-bold">{filteredPositions.length}</div>
             </Card>
-            
+
             <Card className="stat-card">
               <h3 className="text-sm font-medium text-muted-foreground">Total P&L</h3>
               <div className={`mt-2 text-2xl font-bold ${
-                filteredPositions.reduce((sum, pos) => sum + pos.pnl, 0) >= 0 
-                  ? "text-green-600" 
+                filteredPositions.reduce((sum, pos) => sum + pos.pnl, 0) >= 0
+                  ? "text-green-600"
                   : "text-red-600"
               }`}>
                 {formatCurrency(filteredPositions.reduce((sum, pos) => sum + pos.pnl, 0))}
               </div>
             </Card>
-            
+
             <Card className="stat-card">
               <h3 className="text-sm font-medium text-muted-foreground">Active Positions</h3>
               <div className="mt-2 text-2xl font-bold">
@@ -396,9 +408,14 @@ const PositionsPage = () => {
               </div>
             </Card>
           </div>
-          
+
           {/* New Position Dialog */}
-          <Dialog open={isNewPositionDialogOpen} onOpenChange={setIsNewPositionDialogOpen}>
+          <Dialog open={isNewPositionDialogOpen} onOpenChange={(open) => {
+            setIsNewPositionDialogOpen(open);
+            if (!open) {
+              resetNewPositionForm();
+            }
+          }}>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Add New Position</DialogTitle>
@@ -406,7 +423,7 @@ const PositionsPage = () => {
                   Enter the details of your new position below.
                 </DialogDescription>
               </DialogHeader>
-              
+
               <div className="grid gap-4 py-4">
                 {/* Position Type Selection */}
                 <div className="grid gap-2">
@@ -426,26 +443,26 @@ const PositionsPage = () => {
                     </div>
                   </RadioGroup>
                 </div>
-                
+
                 {/* Security Search */}
                 <div className="grid gap-2">
                   <Label>Security</Label>
-                  <SecuritiesSearch 
-                    onSelect={handleSecuritySelect} 
-                    segment={positionType === 'equity' ? 'equity' : 'fno'} 
+                  <SecuritiesSearch
+                    onSelect={handleSecuritySelect}
+                    segment={positionType === 'equity' ? 'equity' : 'fno'}
                     placeholder="Search for securities..."
                   />
                   {newPosition.name && (
                     <p className="text-sm text-muted-foreground mt-1">{newPosition.name}</p>
                   )}
                 </div>
-                
+
                 {/* F&O Specific Fields */}
                 {positionType === 'fno' && (
                   <>
                     <div className="grid gap-2">
                       <Label htmlFor="type">Option Type</Label>
-                      <Select onValueChange={value => setNewPosition({...newPosition, type: value})}>
+                      <Select onValueChange={value => setNewPosition({ ...newPosition, type: value })} value={newPosition.type}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select option type" />
                         </SelectTrigger>
@@ -456,7 +473,7 @@ const PositionsPage = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <div className="grid gap-2">
                       <Label htmlFor="strike">Strike Price</Label>
                       <Input
@@ -465,11 +482,12 @@ const PositionsPage = () => {
                         placeholder="e.g. 18000"
                         value={newPosition.strike}
                         onChange={handleInputChange}
+                        type="number"
                       />
                     </div>
                   </>
                 )}
-                
+
                 {/* Common Fields */}
                 <div className="grid gap-2">
                   <Label htmlFor="qty">Quantity</Label>
@@ -482,7 +500,7 @@ const PositionsPage = () => {
                     onChange={handleInputChange}
                   />
                 </div>
-                
+
                 <div className="grid gap-2">
                   <Label htmlFor="entryPrice">Entry Price (₹)</Label>
                   <Input
@@ -496,7 +514,7 @@ const PositionsPage = () => {
                   />
                 </div>
               </div>
-              
+
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsNewPositionDialogOpen(false)}>
                   Cancel
@@ -516,7 +534,7 @@ const PositionsPage = () => {
           </Dialog>
         </div>
       </div>
-    </DashboardLayout>
+    // </DashboardLayout> <--- REMOVE THIS LINE
   );
 };
 

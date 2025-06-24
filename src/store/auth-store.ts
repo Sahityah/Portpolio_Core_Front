@@ -130,6 +130,7 @@ export const useAuthStore = create<AuthState>()(
         set({ user: null, token: null, isAuthenticated: false });
         localStorage.removeItem("token");
         localStorage.removeItem("auth-store");
+        
       },
 
       updateProfile: async (userData) => {
