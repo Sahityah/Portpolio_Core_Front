@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Card,
@@ -13,16 +13,153 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import { useAuthStore } from "@/store/auth-store";
 import { GoogleLogin } from "@react-oauth/google";
-// import { debounce } from "lodash"; // We can simplify without explicit debounce for this use case
-
 import { AxiosError } from 'axios'; // Import AxiosError for more specific error handling
 
-// Enhanced Email Regex: More robust for common email formats
+// Type definition for a user, potentially from a shared types file
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  token: string; // Authentication token
+  avatar?: string | null;
+};
+
+// ===============================================
+// Mock Authentication Store (useAuthStore)
+// This simulates your global authentication state management.
+// In a real application, this would be a separate file (e.g., src/store/auth-store.ts)
+// using libraries like Zustand, Redux, or React Context.
+// ===============================================
+
+// Mock user data for successful login
+const MOCK_USER: User = {
+  id: "mockuser123",
+  name: "Mock User",
+  email: "test@example.com",
+  token: "mock-jwt-token-for-test-user",
+  avatar: "[https://github.com/shadcn.png](https://github.com/shadcn.png)",
+};
+
+// Mock user data for Google login
+const MOCK_GOOGLE_USER: User = {
+  id: "mockgoogleuser456",
+  name: "Google User",
+  email: "google@example.com",
+  token: "mock-google-jwt-token",
+  avatar: "[https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c](https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c)",
+};
+
+// A simple mock auth store using React's useState and useContext-like pattern
+// For a real app, use a dedicated state management library.
+const useAuthStore = (() => {
+  let _user: User | null = null;
+  let _isAuthenticated: boolean = false;
+  let _listeners: Set<() => void> = new Set();
+
+  const getSnapshot = () => ({
+    user: _user,
+    isAuthenticated: _isAuthenticated,
+  });
+
+  const subscribe = (listener: () => void) => {
+    _listeners.add(listener);
+    return () => _listeners.delete(listener);
+  };
+
+  const publish = () => {
+    _listeners.forEach(listener => listener());
+  };
+
+  const setUserState = (user: User | null) => {
+    _user = user;
+    _isAuthenticated = !!user;
+    if (user) {
+      localStorage.setItem("authToken", user.token);
+      localStorage.setItem("user", JSON.stringify(user)); // Store user data for persistence
+    } else {
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
+    }
+    publish();
+  };
+
+  const login = async (email: string, password: string): Promise<void> => {
+    // Simulate API call
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (email === MOCK_USER.email && password === "password123") {
+          setUserState(MOCK_USER);
+          resolve();
+        } else {
+          reject(new AxiosError("Invalid credentials", '401', undefined, undefined, {
+            status: 401,
+            data: { message: "Invalid email or password provided." }
+          } as any));
+        }
+      }, 1000); // Simulate network delay
+    });
+  };
+
+  const loginWithGoogle = async (credential: string): Promise<void> => {
+    // Simulate API call to your backend with the Google credential
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (credential) { // In a real app, you'd send this to your backend for verification
+          setUserState(MOCK_GOOGLE_USER);
+          resolve();
+        } else {
+          reject(new Error("Google authentication failed."));
+        }
+      }, 1500); // Simulate network delay
+    });
+  };
+
+  const logout = () => {
+    setUserState(null);
+  };
+
+  // Rehydrate state from localStorage on initial load
+  const init = () => {
+    const token = localStorage.getItem("authToken");
+    const storedUser = localStorage.getItem("user");
+    if (token && storedUser) {
+      try {
+        _user = JSON.parse(storedUser);
+        _isAuthenticated = true;
+      } catch (e) {
+        console.error("Failed to parse stored user data:", e);
+        logout(); // Clear invalid data
+      }
+    }
+  };
+
+  // Run initialization once
+  if (!_user && !_isAuthenticated && typeof window !== 'undefined') { // Check for window to ensure client-side
+    init();
+  }
+
+  // The actual hook for components
+  return () => {
+    const [state, setState] = useState(getSnapshot());
+
+    useEffect(() => {
+      const listener = () => setState(getSnapshot());
+      const unsubscribe = subscribe(listener);
+      return () => unsubscribe();
+    }, []);
+
+    return { ...state, login, loginWithGoogle, logout };
+  };
+})();
+
+// ===============================================
+// End of Mock Authentication Store
+// ===============================================
+
+
+// Regular expressions for validation
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-// For login, password minimum length should align with what the backend accepts,
-// typically matching the registration minimum. If registration is 8+, make this 8+.
 const MIN_PASSWORD_LENGTH = 8; // Consistent with RegisterPage's strong password validation
 
 
@@ -31,12 +168,8 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  // const [showGoogleLogin, setShowGoogleLogin] = useState(true); // Retaining, but if always true, can be removed
 
-  const login = useAuthStore((state) => state.login);
-  const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
+  const { login, loginWithGoogle, isAuthenticated } = useAuthStore(); // Use the mock auth store
   const navigate = useNavigate();
   const { toast } = useToast();
   const hasNavigated = useRef(false);
@@ -51,13 +184,9 @@ const LoginPage = () => {
       hasNavigated.current = true; // Set ref to true to prevent future navigations
       navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, navigate]); // Depend on isAuthenticated and navigate
+  }, [isAuthenticated, navigate]);
 
-  // Removed debounced validation for simplicity in handleChange,
-  // relying on `validate` for final submission check.
-  // Real-time validation can be done directly if simple enough, or through a custom hook.
-
-  const validate = () => {
+  const validate = useCallback(() => {
     const newErrors: { email?: string; password?: string } = {};
 
     if (!formData.email) {
@@ -74,7 +203,7 @@ const LoginPage = () => {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -101,7 +230,7 @@ const LoginPage = () => {
       // Navigation is handled by the useEffect based on isAuthenticated
     } catch (error) {
       // Enhancement: More specific error messages from backend
-      let description = "Invalid credentials. Please try again.";
+      let description = "An unexpected error occurred during login.";
       if (error instanceof AxiosError) {
         if (error.response?.data?.message) {
           description = error.response.data.message;
@@ -170,7 +299,6 @@ const LoginPage = () => {
 
         <CardContent>
           <div className="space-y-4">
-            {/* showGoogleLogin check is currently redundant if always true, consider removing or adding logic */}
             <div className={isLoading ? "pointer-events-none opacity-60" : ""}>
               <GoogleLogin
                 onSuccess={handleGoogleSuccess}
@@ -218,7 +346,7 @@ const LoginPage = () => {
                   disabled={isLoading}
                   autoComplete="email"
                   aria-invalid={!!errors.email}
-                  autoFocus // Enhancement: Auto-focus on first input
+                  autoFocus
                 />
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
               </div>
@@ -240,7 +368,7 @@ const LoginPage = () => {
                     onChange={handleChange}
                     disabled={isLoading}
                     autoComplete="current-password"
-                    aria-invalid={!!errors.password} // Enhancement: Add aria-invalid
+                    aria-invalid={!!errors.password}
                   />
                   <Button
                     type="button"
@@ -248,8 +376,8 @@ const LoginPage = () => {
                     size="icon"
                     className="absolute right-0 top-0 h-full px-3"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Hide password" : "Show password"} // Enhancement: Add aria-label
-                    aria-pressed={showPassword} // Enhancement: Add aria-pressed
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
