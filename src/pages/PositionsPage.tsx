@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Filter, Loader2, Trash2 } from "lucide-react"; // Import Loader2 and Trash2 for spinners/icons
-import { formatCurrency } from "../../lib/currency"; // Adjusted relative import path
-import { SecuritiesSearch } from "../../components/SecuritiesSearch"; // Adjusted relative import path
+import { formatCurrency } from "@/lib/currency"; // Adjusted relative import path
+import { SecuritiesSearch } from "@/components/SecuritiesSearch"; // Adjusted relative import path
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
-import { ReportDownload } from "../../components/ReportDownload"; // Adjusted relative import path
+import { ReportDownload } from "@/components/ReportDownload"; // Adjusted relative import path
 import {
   Dialog,
   DialogContent,
@@ -76,7 +76,7 @@ interface IPortfolioApi {
 // This is a workaround to resolve compilation errors if the original type definition is missing methods or has incorrect signatures.
 // If your actual portfolioApi object at runtime does NOT have these methods or their expected behavior,
 // this will lead to runtime errors instead of compilation errors.
-import { portfolioApi as originalPortfolioApi } from "../../lib/api"; // Adjusted relative import path
+import { portfolioApi as originalPortfolioApi } from "@/lib/api"; // Adjusted relative import path
 const portfolioApi: IPortfolioApi = originalPortfolioApi as IPortfolioApi;
 
 
