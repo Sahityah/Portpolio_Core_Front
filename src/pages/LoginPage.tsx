@@ -28,7 +28,7 @@ type User = {
 // ===============================================
 // Mock Authentication Store (useAuthStore)
 // This simulates your global authentication state management.
-// In a real application, this would be a separate file (e.g., src/store/auth-store.ts)
+// In a real application, this would be a separate file (e.e.g, src/store/auth-store.ts)
 // using libraries like Zustand, Redux, or React Context.
 // ===============================================
 
@@ -38,7 +38,7 @@ const MOCK_USER: User = {
   name: "Mock User",
   email: "test@example.com",
   token: "mock-jwt-token-for-test-user",
-  avatar: "[https://github.com/shadcn.png](https://github.com/shadcn.png)",
+  avatar: "https://github.com/shadcn.png", // Corrected URL format
 };
 
 // Mock user data for Google login
@@ -47,7 +47,7 @@ const MOCK_GOOGLE_USER: User = {
   name: "Google User",
   email: "google@example.com",
   token: "mock-google-jwt-token",
-  avatar: "[https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c](https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c)",
+  avatar: "https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c", // Corrected URL format
 };
 
 // A simple mock auth store using React's useState and useContext-like pattern
@@ -62,9 +62,9 @@ const useAuthStore = (() => {
     isAuthenticated: _isAuthenticated,
   });
 
-  const subscribe = (listener: () => void): (() => void) => { // Explicitly type the return as void
+  const subscribe = (listener: () => void): (() => void) => {
     _listeners.add(listener);
-    return () => { _listeners.delete(listener); }; // Wrap in a function that returns void
+    return () => { _listeners.delete(listener); };
   };
 
   const publish = () => {
@@ -146,7 +146,7 @@ const useAuthStore = (() => {
     useEffect(() => {
       const listener = () => setState(getSnapshot());
       const unsubscribe = subscribe(listener);
-      return unsubscribe; // This is now correct, as subscribe returns () => void
+      return unsubscribe;
     }, []);
 
     return { ...state, login, loginWithGoogle, logout };
@@ -172,19 +172,23 @@ const LoginPage = () => {
   const { login, loginWithGoogle, isAuthenticated } = useAuthStore(); // Use the mock auth store
   const navigate = useNavigate();
   const { toast } = useToast();
-  const hasNavigated = useRef(false);
+  // We'll manage navigation logic differently, no longer needing `hasNavigated` ref this way.
+  // const hasNavigated = useRef(false); // REMOVE THIS REF
 
   useEffect(() => {
     document.title = "Login - Portfolio Manager";
   }, []);
 
+  // --- CORRECTED NAVIGATION LOGIC ---
   useEffect(() => {
-    // Only navigate if isAuthenticated becomes true AND we haven't navigated yet
-    if (isAuthenticated && !hasNavigated.current) {
-      hasNavigated.current = true; // Set ref to true to prevent future navigations
+    if (isAuthenticated) {
+      // If user is authenticated, navigate to dashboard.
+      // Use replace to prevent going back to login page with back button.
       navigate("/dashboard", { replace: true });
     }
+    // No 'else' needed here for resetting. The component will just render login form.
   }, [isAuthenticated, navigate]);
+
 
   const validate = useCallback(() => {
     const newErrors: { email?: string; password?: string } = {};
@@ -210,8 +214,8 @@ const LoginPage = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
 
     // Clear specific error message as user types
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: undefined }));
+    if (errors[name as keyof typeof errors]) { // Type assertion for errors[name]
+      setErrors((prev) => ({ ...prev, [name as keyof typeof errors]: undefined }));
     }
   };
 
@@ -227,9 +231,8 @@ const LoginPage = () => {
         title: "Login successful",
         description: "Welcome back to your portfolio dashboard",
       });
-      // Navigation is handled by the useEffect based on isAuthenticated
+      // Navigation is now handled by the useEffect based on isAuthenticated
     } catch (error) {
-      // Enhancement: More specific error messages from backend
       let description = "An unexpected error occurred during login.";
       if (error instanceof AxiosError) {
         if (error.response?.data?.message) {
@@ -268,9 +271,8 @@ const LoginPage = () => {
         title: "Google login successful",
         description: "Welcome!",
       });
-      // Navigation is handled by the useEffect based on isAuthenticated
+      // Navigation is now handled by the useEffect based on isAuthenticated
     } catch (error) {
-      // Enhancement: More specific error messages from backend
       let description = "Problem authenticating with Google. Please try again.";
       if (error instanceof AxiosError && error.response?.data?.message) {
         description = error.response.data.message;
@@ -331,7 +333,8 @@ const LoginPage = () => {
 
             <form
               onSubmit={handleSubmit}
-              onKeyDown={(e) => isLoading && e.key === "Enter" && e.preventDefault()}
+              // Removed onKeyDown as it interferes with normal form submission and enter key
+              // It's generally better to rely on onSubmit for form handling.
               className="space-y-4"
             >
               <div>
