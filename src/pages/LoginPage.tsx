@@ -15,11 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-// Removed: import { GoogleLogin } from "@react-oauth/google"; // No longer using client-side Google component
-import { AxiosError } from 'axios'; // Import AxiosError for more specific error handling
+import { AxiosError } from 'axios';
 
-// Import the actual useAuthStore from its dedicated file (the Canvas document)
-import useAuthStore from "@/store/useAuthStore"; // Assuming this path based on typical project structure
+// FIXED: Corrected import to use named import {} for useAuthStore
+// This line should now be:
+import { useAuthStore } from "@/store/useAuthStore"; // Corrected import: use named import {} as useAuthStore is a named export
 
 // Regular expressions for validation
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -32,7 +32,7 @@ const LoginPage = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  const { login, isAuthenticated, setAuthenticated, setToken } = useAuthStore(); // Added setAuthenticated, setToken for URL parsing
+  const { login, isAuthenticated, setAuthenticated, setToken } = useAuthStore();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -68,7 +68,7 @@ const LoginPage = () => {
       // Clean the URL by removing the error parameter
       navigate("/login", { replace: true });
     }
-  }, [navigate, setAuthenticated, setToken, toast]); // Added setAuthenticated, setToken to deps
+  }, [navigate, setAuthenticated, setToken, toast]);
 
   // --- CORRECTED NAVIGATION LOGIC ---
   useEffect(() => {
