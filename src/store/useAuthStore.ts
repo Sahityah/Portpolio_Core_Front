@@ -1,224 +1,220 @@
-import { useState, useEffect } from "react";
-import { AxiosError } from "axios";
-import { authApi } from "@/lib/api"; // ✅ real backend API module
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import axios, { AxiosError } from 'axios';
+import jwtDecode from 'jwt-decode';
 
-// Type definition
-type User = {
+// --- User type ---
+export type User = {
   id: string;
-  name: string;
   email: string;
-  token: string;
+  username: string;
   avatar?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  provider?: 'EMAIL' | 'GOOGLE';
 };
 
-// Mock user data
-const MOCK_USER: User = {
-  id: "mockuser123",
-  name: "Mock User",
-  email: "test@example.com",
-  token: "mock-jwt-token",
-  avatar: "https://github.com/shadcn.png",
+// --- Decoded token type ---
+type DecodedToken = {
+  exp: number;
+  iat: number;
+  sub: string;
 };
 
-const MOCK_GOOGLE_USER: User = {
-  id: "mockgoogleuser456",
-  name: "Google User",
-  email: "google@example.com",
-  token: "mock-google-jwt-token",
-  avatar: "https://lh3.googleusercontent.com/a/default-photo=s96-c",
-};
+// --- Constants ---
+const AUTH_TOKEN_KEY = 'jwtToken';
+const API_BASE_URL = 'https://personal-portfolio-29nl.onrender.com/api/auth';
 
-// Toggle mock vs real backend mode (optionally via .env)
-const USE_MOCK_AUTH = false;
+// --- Zustand Store State and Actions ---
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
 
-// This is a singleton-like pattern for a simple global store
-const useAuthStore = (() => {
-  let _user: User | null = null;
-  let _isAuthenticated = false;
-  const _listeners = new Set<() => void>();
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
+  updateProfile: (userData: Partial<User>) => Promise<void>;
+  logout: () => void;
 
-  // Returns the current state snapshot
-  const getSnapshot = () => ({
-    user: _user,
-    isAuthenticated: _isAuthenticated,
-  });
+  setAuthenticated: (status: boolean) => void;
+  setToken: (newToken: string | null) => void;
+  setUser: (newUser: User | null) => void;
+}
 
-  // Allows React components to subscribe to state changes
-  const subscribe = (listener: () => void) => {
-    _listeners.add(listener);
-    // The cleanup function for useEffect must return void.
-    // _listeners.delete(listener) returns a boolean, so we ensure void.
-    return () => {
-      _listeners.delete(listener);
-    };
-  };
+// --- Zustand Auth Store ---
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
 
-  // Notifies all subscribed components of a state change
-  const publish = () => {
-    _listeners.forEach(listener => listener());
-  };
-
-  // Updates the internal state and notifies subscribers
-  const setUserState = (user: User | null) => {
-    _user = user;
-    _isAuthenticated = !!user; // isAuthenticated is true if user is not null
-    if (user) {
-      localStorage.setItem("authToken", user.token);
-      localStorage.setItem("user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("user");
-    }
-    publish();
-  };
-
-  // Handles user login via email and password
-  const login = async (email: string, password: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (email === MOCK_USER.email && password === "password123") {
-            setUserState(MOCK_USER);
-            resolve();
-          } else {
-            reject(
-              new AxiosError("Invalid credentials", "401", undefined, undefined, {
-                status: 401,
-                data: { message: "Invalid email or password." },
-              } as any)
-            );
-          }
-        }, 1000);
-      });
-    } else {
-      // Calls the real backend API for login
-      const response = await authApi.login({ email, password });
-      const { token, user: userData } = response.data;
-
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
-
-      setUserState(user);
-    }
-  };
-
-  // Handles Google login with a credential
-  const loginWithGoogle = async (credential: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (credential) {
-            setUserState(MOCK_GOOGLE_USER);
-            resolve();
-          } else {
-            reject(new Error("Google login failed."));
-          }
-        }, 1000);
-      });
-    } else {
-      // This line was causing the previous error as authApi.googleLogin didn't exist.
-      // Assuming you've added it to authApi or adjusted your call as per previous instructions.
-      const response = await authApi.googleLogin(credential);
-      const { token, user: userData } = response.data;
-
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
-
-      setUserState(user);
-    }
-  };
-
-  // Handles user registration
-  const register = async (name: string, email: string, password: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (name && email && password) {
-            // For mock, simply simulate a new user
-            const newUser: User = {
-              id: `mock-${Date.now()}`,
-              name,
-              email,
-              token: `mock-jwt-token-${Date.now()}`,
+      // --- Login API Call (with Mock Login) ---
+      login: async (email, password) => {
+        set({ isLoading: true });
+        try {
+          // ✅ MOCK LOGIN CUSTOM DETAIL
+          if (email === "mock@example.com" && password === "mockpassword") {
+            console.log("Performing mock login for custom user.");
+            const mockToken = "mock-jwt-token-for-test-user-123";
+            const mockUser: User = {
+              id: "mock-user-1",
+              email: "mock@example.com",
+              username: "Mock User",
               avatar: null,
+              provider: 'EMAIL'
             };
-            setUserState(newUser);
-            resolve();
-          } else {
-            reject(new AxiosError("Registration failed. Missing fields.", '400', undefined, undefined, {
-              status: 400,
-              data: { message: "All fields are required for registration." }
-            } as any));
+
+            localStorage.setItem(AUTH_TOKEN_KEY, mockToken);
+            localStorage.setItem('user', JSON.stringify(mockUser));
+
+            set({
+              isAuthenticated: true,
+              token: mockToken,
+              user: mockUser,
+              isLoading: false,
+            });
+            return; // Exit after mock login
           }
-        }, 1000);
-      });
-    } else {
-      // Calls the real backend API for registration
-      const response = await authApi.register({ name, email, password });
-      const { token, user: userData } = response.data;
 
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
+          // ✅ Actual API login (only if not mock)
+          const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
+          const { token, user } = response.data;
 
-      setUserState(user);
+          localStorage.setItem(AUTH_TOKEN_KEY, token);
+          localStorage.setItem('user', JSON.stringify(user));
+
+          set({
+            isAuthenticated: true,
+            token,
+            user,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            'Login failed';
+          console.error('Login API error:', message, error);
+          get().logout(); // Logout on error
+          throw new Error(message);
+        }
+      },
+
+      // --- Register API Call ---
+      register: async (name, email, password) => {
+        set({ isLoading: true });
+        try {
+          const response = await axios.post(`${API_BASE_URL}/register`, {
+            username: name,
+            email,
+            password,
+          });
+          const { token, user } = response.data;
+
+          localStorage.setItem(AUTH_TOKEN_KEY, token);
+          localStorage.setItem('user', JSON.stringify(user));
+
+          set({
+            isAuthenticated: true,
+            token,
+            user,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            'Registration failed';
+          console.error('Register API error:', message, error);
+          get().logout();
+          throw new Error(message);
+        }
+      },
+
+      // --- Update Profile API Call ---
+      updateProfile: async (userData) => {
+        set({ isLoading: true });
+        try {
+          const { data } = await axios.put(`${API_BASE_URL}/profile`, userData, {
+            headers: getAuthHeaders(),
+          });
+          localStorage.setItem('user', JSON.stringify(data));
+          set({ user: data, isLoading: false });
+        } catch (error: unknown) {
+          const message =
+            (error instanceof AxiosError && error.response?.data?.message) ||
+            (error instanceof Error && error.message) ||
+            'Failed to update profile';
+          console.error('Update profile API error:', message, error);
+          set({ isLoading: false });
+          throw new Error(message);
+        }
+      },
+
+      // --- Logout ---
+      logout: () => {
+        set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem('user');
+        localStorage.removeItem('auth-store'); // Clear the persist store's internal storage
+      },
+
+      // --- State Setters ---
+      setAuthenticated: (status: boolean) => set({ isAuthenticated: status }),
+
+      setToken: (newToken: string | null) => {
+        set({ token: newToken });
+        if (newToken) {
+          localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+        } else {
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+        }
+      },
+
+      setUser: (newUser: User | null) => {
+        set({ user: newUser });
+        if (newUser) {
+          localStorage.setItem('user', JSON.stringify(newUser));
+        } else {
+          localStorage.removeItem('user');
+        }
+      },
+    }),
+    {
+      name: 'auth-store',
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.token) {
+          try {
+            const decoded: DecodedToken = jwtDecode(state.token);
+            const now = Date.now() / 1000;
+            if (decoded.exp < now) {
+              console.warn('Token expired, logging out.');
+              state.logout();
+            } else {
+              state.setAuthenticated(true);
+            }
+          } catch (err) {
+            console.error('Invalid token detected during rehydration:', err);
+            state.logout();
+          }
+        }
+      },
     }
-  };
+  )
+);
 
-  // Logs out the user by clearing state and local storage
-  const logout = () => {
-    setUserState(null);
-  };
-
-  // Initializes the auth state from local storage on load
-  const init = () => {
-    const token = localStorage.getItem("authToken");
-    const storedUser = localStorage.getItem("user");
-    if (token && storedUser) {
-      try {
-        _user = JSON.parse(storedUser);
-        _isAuthenticated = true;
-      } catch (e) {
-        console.error("Failed to parse stored user data", e);
-        logout(); // Clear corrupted data
-      }
-    }
-  };
-
-  // Initialize the store only once when the module is loaded (server-side check)
-  if (!_user && typeof window !== "undefined") {
-    init();
-  }
-
-  // The React Hook part of the custom store
-  return () => {
-    const [state, setState] = useState(getSnapshot());
-
-    // Subscribes to store changes and updates component state
-    useEffect(() => {
-      const listener = () => setState(getSnapshot());
-      const unsubscribe = subscribe(listener); // Get the cleanup function
-      return unsubscribe; // Return the cleanup function
-    }, []); // Empty dependency array ensures this runs once on mount
-
-    // Returns the current state and actions to components
-    // 'register' has been added here to be exposed to components using the hook
-    return { ...state, login, loginWithGoogle, register, logout };
-  };
-})(); // IIFE to create the singleton instance
-
-export default useAuthStore;
+// --- Auth headers helper ---
+const getAuthHeaders = () => ({
+  Authorization: `Bearer ${useAuthStore.getState().token}`,
+});

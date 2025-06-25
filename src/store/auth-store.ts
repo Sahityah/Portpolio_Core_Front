@@ -1,7 +1,6 @@
-import { create } from "zustand";
+/*import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import api from "@/lib/api"; // Assuming this is your Axios instance or similar
-import { jwtDecode } from "jwt-decode"; // Unused in provided snippet, but kept for context
+import { api } from "@/lib/api"; // Assuming this is your Axios instance or similar
 import { AxiosError } from "axios";
 
 export type User = {
@@ -179,4 +178,4 @@ export const useAuthStore = create<AuthState>()(
       }),
     }
   )
-);
+);*/
