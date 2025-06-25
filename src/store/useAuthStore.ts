@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import axios, { AxiosError } from 'axios';
-import jwtDecode from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode'; // FIXED: Changed to named import for jwtDecode
 
 // --- User type ---
 export type User = {
