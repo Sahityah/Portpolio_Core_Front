@@ -1,225 +1,135 @@
-import { useState, useEffect } from "react";
-import { AxiosError } from "axios";
-import { authApi } from "@/lib/api"; // ✅ real backend API module
+// src/pages/RegisterPage.tsx
 
-// Type definition
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  token: string;
-  avatar?: string | null;
-};
+import React, { useState } from 'react';
+import useAuthStore from '@/store/useAuthStore'; // Adjust this path if your useAuthStore is elsewhere
+import { Button } from '@/components/ui/button'; // Example UI components (adjust paths as needed)
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
-// Mock user data for successful login
-const MOCK_USER: User = {
-  id: "mockuser123",
-  name: "Mock User",
-  email: "test@example.com",
-  token: "mock-jwt-token-for-test-user",
-  avatar: "https://github.com/shadcn.png", // Corrected URL format
-};
+const RegisterPage: React.FC = () => {
+  // Correctly use the hook to get auth functions and state
+  const { register, loginWithGoogle, isAuthenticated } = useAuthStore();
 
-// Mock user data for Google login
-const MOCK_GOOGLE_USER: User = {
-  id: "mockgoogleuser456",
-  name: "Google User",
-  email: "google@example.com",
-  token: "mock-google-jwt-token",
-  avatar: "https://lh3.googleusercontent.com/a/AGNmyxZq_12345=s96-c", // Corrected URL format
-};
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-// Toggle mock vs real backend mode (optionally via .env)
-const USE_MOCK_AUTH = false;
-
-// This is a singleton-like pattern for a simple global store
-const useAuthStore = (() => {
-  let _user: User | null = null;
-  let _isAuthenticated = false;
-  const _listeners = new Set<() => void>();
-
-  // Returns the current state snapshot
-  const getSnapshot = () => ({
-    user: _user,
-    isAuthenticated: _isAuthenticated,
-  });
-
-  // Allows React components to subscribe to state changes
-  const subscribe = (listener: () => void) => {
-    _listeners.add(listener);
-    // The cleanup function for useEffect must return void.
-    // _listeners.delete(listener) returns a boolean, so we ensure void.
-    return () => {
-      _listeners.delete(listener);
-    };
-  };
-
-  // Notifies all subscribed components of a state change
-  const publish = () => {
-    _listeners.forEach(listener => listener());
-  };
-
-  // Updates the internal state and notifies subscribers
-  const setUserState = (user: User | null) => {
-    _user = user;
-    _isAuthenticated = !!user; // isAuthenticated is true if user is not null
-    if (user) {
-      localStorage.setItem("authToken", user.token);
-      localStorage.setItem("user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("user");
-    }
-    publish();
-  };
-
-  // Handles user login via email and password
-  const login = async (email: string, password: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (email === MOCK_USER.email && password === "password123") {
-            setUserState(MOCK_USER);
-            resolve();
-          } else {
-            reject(
-              new AxiosError("Invalid credentials", '401', undefined, undefined, {
-                status: 401,
-                data: { message: "Invalid email or password provided." }
-              } as any)
-            );
-          }
-        }, 1000);
-      });
-    } else {
-      // Calls the real backend API for login
-      const response = await authApi.login({ email, password });
-      const { token, user: userData } = response.data;
-
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
-
-      setUserState(user);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await register(name, email, password);
+      // Optional: Redirect to dashboard or show success message on successful registration
+      // navigate('/dashboard'); // If you're using useNavigate from react-router-dom
+      console.log('Registration successful!');
+    } catch (err: any) {
+      console.error('Registration failed:', err);
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handles Google login with a credential
-  const loginWithGoogle = async (credential: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (credential) {
-            setUserState(MOCK_GOOGLE_USER);
-            resolve();
-          } else {
-            reject(new Error("Google authentication failed."));
-          }
-        }, 1500);
-      });
-    } else {
-      // This line was causing the previous error as authApi.googleLogin didn't exist.
-      // Assuming you've added it to authApi or adjusted your call as per previous instructions.
-      const response = await authApi.googleLogin(credential);
-      const { token, user: userData } = response.data;
-
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
-
-      setUserState(user);
+  const handleGoogleLogin = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      // In a real application, you'd trigger the Google One Tap/OAuth flow here
+      // and get the credential. For this example, we'll use a mock credential.
+      await loginWithGoogle("mock_google_credential_from_ui");
+      console.log('Google login successful!');
+    } catch (err: any) {
+      console.error('Google login failed:', err);
+      setError(err.message || 'Google login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handles user registration
-  const register = async (name: string, email: string, password: string): Promise<void> => {
-    if (USE_MOCK_AUTH) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (name && email && password) {
-            // For mock, simply simulate a new user
-            const newUser: User = {
-              id: `mock-${Date.now()}`,
-              name,
-              email,
-              token: `mock-jwt-token-${Date.now()}`,
-              avatar: null,
-            };
-            setUserState(newUser);
-            resolve();
-          } else {
-            reject(new AxiosError("Registration failed. Missing fields.", '400', undefined, undefined, {
-              status: 400,
-              data: { message: "All fields are required for registration." }
-            } as any));
-          }
-        }, 1000);
-      });
-    } else {
-      // Calls the real backend API for registration
-      const response = await authApi.register({ name, email, password });
-      const { token, user: userData } = response.data;
-
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        token,
-        avatar: userData.avatar || null,
-      };
-
-      setUserState(user);
-    }
-  };
-
-  // Logs out the user by clearing state and local storage
-  const logout = () => {
-    setUserState(null);
-  };
-
-  // Initializes the auth state from local storage on load
-  const init = () => {
-    const token = localStorage.getItem("authToken");
-    const storedUser = localStorage.getItem("user");
-    if (token && storedUser) {
-      try {
-        _user = JSON.parse(storedUser);
-        _isAuthenticated = true;
-      } catch (e) {
-        console.error("Failed to parse stored user data:", e);
-        logout(); // Clear corrupted data
-      }
-    }
-  };
-
-  // Run initialization once
-  if (!_user && !_isAuthenticated && typeof window !== 'undefined') { // Check for window to ensure client-side
-    init();
+  // If already authenticated, perhaps redirect or show different content
+  if (isAuthenticated) {
+    // return <p>You are already logged in!</p>; // Or redirect via navigate('/dashboard')
   }
 
-  // The actual hook for components
-  return () => {
-    const [state, setState] = useState(getSnapshot());
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold text-center mb-6">Register</h2>
 
-    // Subscribes to store changes and updates component state
-    useEffect(() => {
-      const listener = () => setState(getSnapshot());
-      const unsubscribe = subscribe(listener); // Get the cleanup function
-      return unsubscribe; // Return the cleanup function
-    }, []); // Empty dependency array ensures this runs once on mount
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
 
-    // Returns the current state and actions to components
-    // Added 'register' to the exposed functions
-    return { ...state, login, loginWithGoogle, register, logout };
-  };
-})(); // IIFE to create the singleton instance
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your Name"
+              required
+              className="mt-1 block w-full"
+            />
+          </div>
+          <div>
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              className="mt-1 block w-full"
+            />
+          </div>
+          <div>
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              required
+              className="mt-1 block w-full"
+            />
+          </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Registering...' : 'Register'}
+          </Button>
+        </form>
 
-export default useAuthStore;
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t"></span>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="bg-white px-2 text-gray-500">Or continue with</span>
+          </div>
+        </div>
+
+        <Button
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+        >
+          {loading ? 'Signing in with Google...' : 'Sign in with Google'}
+        </Button>
+
+        <p className="mt-6 text-center text-sm text-gray-600">
+          Already have an account? <a href="/login" className="text-blue-600 hover:underline">Login</a>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default RegisterPage;

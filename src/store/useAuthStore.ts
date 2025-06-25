@@ -138,6 +138,47 @@ const useAuthStore = (() => {
     }
   };
 
+  // Handles user registration
+  const register = async (name: string, email: string, password: string): Promise<void> => {
+    if (USE_MOCK_AUTH) {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if (name && email && password) {
+            // For mock, simply simulate a new user
+            const newUser: User = {
+              id: `mock-${Date.now()}`,
+              name,
+              email,
+              token: `mock-jwt-token-${Date.now()}`,
+              avatar: null,
+            };
+            setUserState(newUser);
+            resolve();
+          } else {
+            reject(new AxiosError("Registration failed. Missing fields.", '400', undefined, undefined, {
+              status: 400,
+              data: { message: "All fields are required for registration." }
+            } as any));
+          }
+        }, 1000);
+      });
+    } else {
+      // Calls the real backend API for registration
+      const response = await authApi.register({ name, email, password });
+      const { token, user: userData } = response.data;
+
+      const user: User = {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        token,
+        avatar: userData.avatar || null,
+      };
+
+      setUserState(user);
+    }
+  };
+
   // Logs out the user by clearing state and local storage
   const logout = () => {
     setUserState(null);
@@ -175,7 +216,8 @@ const useAuthStore = (() => {
     }, []); // Empty dependency array ensures this runs once on mount
 
     // Returns the current state and actions to components
-    return { ...state, login, loginWithGoogle, logout };
+    // 'register' has been added here to be exposed to components using the hook
+    return { ...state, login, loginWithGoogle, register, logout };
   };
 })(); // IIFE to create the singleton instance
 
