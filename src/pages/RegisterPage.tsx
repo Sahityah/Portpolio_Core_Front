@@ -1,6 +1,6 @@
 // src/pages/RegisterPage.tsx
 
-import React, { useState ,useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate for redirection
 import useAuthStore from '@/store/useAuthStore'; // Adjust this path if your useAuthStore is elsewhere
 import { Button } from '@/components/ui/button'; // Example UI components (adjust paths as needed)
@@ -8,9 +8,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eye, EyeOff } from 'lucide-react'; // For show/hide password icon
 
+// Define your Google OAuth constants
+// !!! IMPORTANT: Replace these with your actual Client ID and Redirect URI from Google Cloud Console !!!
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID; // Your actual Google Client ID
+const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI ; // Your backend endpoint to handle Google redirect
+const GOOGLE_SCOPE = 'email profile'; // Scopes you are requesting
+const GOOGLE_RESPONSE_TYPE = 'code'; // Requesting an authorization code (PKCE flow)
+
+// For generating unique state parameter (recommended for CSRF protection)
+// You might need to install 'uuid': npm install uuid
+import { v4 as uuidv4 } from 'uuid';
+
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate(); // Initialize navigate hook
-  const { register, loginWithGoogle, isAuthenticated } = useAuthStore();
+  const { register, isAuthenticated } = useAuthStore(); // Removed loginWithGoogle from destructuring as it's not directly called here for initiation
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -93,28 +104,34 @@ const RegisterPage: React.FC = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
     setError(null);
+    // Setting loading state here is debatable as the browser is redirecting away,
+    // but it can provide immediate visual feedback before redirect.
     setLoading(true);
-    try {
-      // In a real application, you would integrate Google One Tap or OAuth 2.0 flow here.
-      // This typically involves:
-      // 1. Initializing Google Identity Services client (gapi.client.init or google.accounts.id.initialize).
-      // 2. Displaying the Google One Tap prompt or a Google sign-in button.
-      // 3. Handling the successful credential response (ID token).
-      // 4. Sending the ID token to your backend via loginWithGoogle.
 
-      // For this example, we're using a mock credential.
-      await loginWithGoogle("mock_google_credential_from_ui_flow");
-      console.log('Google login successful!');
-      navigate('/dashboard'); // Redirect on successful Google login
-    } catch (err: any) {
-      console.error('Google login failed:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Google sign-in failed. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
+    // Generate a random state parameter for CSRF protection
+    const state = uuidv4();
+    // Store the state in local storage to verify it upon return from Google
+    localStorage.setItem('oauth_state', state);
+
+    const params = new URLSearchParams({
+      response_type: GOOGLE_RESPONSE_TYPE,
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GOOGLE_SCOPE,
+      redirect_uri: GOOGLE_REDIRECT_URI,
+      state: state,
+      // Optional: 'prompt=select_account' can be added to force account selection
+      // Optional: 'access_type=offline' for obtaining a refresh token (requires proper backend handling)
+    });
+
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+    // Redirect the user's browser to Google's authentication page
+    window.location.href = googleAuthUrl;
+
+    // Note: The execution of JavaScript on this page stops after window.location.href,
+    // as the browser navigates away. The authentication flow continues on your backend.
   };
 
   // If already authenticated, redirect to dashboard
