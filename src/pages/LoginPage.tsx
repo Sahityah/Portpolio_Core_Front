@@ -1,8 +1,7 @@
+// src/pages/LoginPage.tsx
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-// We no longer import authApi directly here, as useAuthStore handles the API calls.
-// import { authApi } from "@/lib/api"; // Removed direct import
-
 import {
   Card,
   CardContent,
@@ -16,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import { GoogleLogin } from "@react-oauth/google";
+// Removed: import { GoogleLogin } from "@react-oauth/google"; // No longer using client-side Google component
 import { AxiosError } from 'axios'; // Import AxiosError for more specific error handling
 
 // Import the actual useAuthStore from its dedicated file (the Canvas document)
@@ -33,14 +32,43 @@ const LoginPage = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  // Use the imported useAuthStore from your store file
-  const { login, loginWithGoogle, isAuthenticated } = useAuthStore();
+  const { login, isAuthenticated, setAuthenticated, setToken } = useAuthStore(); // Added setAuthenticated, setToken for URL parsing
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     document.title = "Login - Portfolio Manager";
-  }, []);
+
+    // Check for a JWT token in the URL after Google OAuth callback
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
+    const errorFromUrl = urlParams.get('error');
+
+    if (tokenFromUrl) {
+      console.log("JWT token found in URL:", tokenFromUrl);
+      // Assuming useAuthStore has actions to set the token and authentication status
+      setToken(tokenFromUrl);
+      setAuthenticated(true);
+
+      toast({
+        title: "Login Successful",
+        description: "Welcome back!",
+      });
+
+      // Clean the URL by removing the token parameter for security and aesthetics
+      // and then navigate to the dashboard
+      navigate("/dashboard", { replace: true });
+    } else if (errorFromUrl) {
+      console.error("Error from OAuth callback:", errorFromUrl);
+      toast({
+        title: "Authentication Failed",
+        description: `Error: ${decodeURIComponent(errorFromUrl)}`,
+        variant: "destructive",
+      });
+      // Clean the URL by removing the error parameter
+      navigate("/login", { replace: true });
+    }
+  }, [navigate, setAuthenticated, setToken, toast]); // Added setAuthenticated, setToken to deps
 
   // --- CORRECTED NAVIGATION LOGIC ---
   useEffect(() => {
@@ -49,7 +77,6 @@ const LoginPage = () => {
       // Use replace to prevent going back to login page with back button.
       navigate("/dashboard", { replace: true });
     }
-    // No 'else' needed here for resetting. The component will just render login form.
   }, [isAuthenticated, navigate]);
 
 
@@ -117,39 +144,15 @@ const LoginPage = () => {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse: any) => {
-    setIsLoading(true); // Set loading state for Google login as well
-    if (!credentialResponse.credential) {
-      toast({
-        title: "Google login failed",
-        description: "No credential received from Google.",
-        variant: "destructive",
-      });
-      setIsLoading(false); // Reset loading state
-      return;
-    }
-    try {
-      await loginWithGoogle(credentialResponse.credential);
-      toast({
-        title: "Google login successful",
-        description: "Welcome!",
-      });
-      // Navigation is now handled by the useEffect based on isAuthenticated
-    } catch (error) {
-      let description = "Problem authenticating with Google. Please try again.";
-      if (error instanceof AxiosError && error.response?.data?.message) {
-        description = error.response.data.message;
-      } else if (error instanceof Error) {
-        description = error.message;
-      }
-      toast({
-        title: "Google login failed",
-        description: description,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false); // Reset loading state
-    }
+  // Renamed and modified from handleGoogleSuccess
+  const handleGoogleLoginRedirect = () => {
+    setIsLoading(true); // Indicate loading as we're initiating a redirect
+    // IMPORTANT CHANGE: Redirect to your backend's Spring Security OAuth2 authorization endpoint
+    const backendBaseUrl = 'https://personal-portfolio-29nl.onrender.com'; // Replace with your actual backend base URL
+    window.location.href = `${backendBaseUrl}/oauth2/authorization/google`;
+
+    // Note: The execution of JavaScript on this page stops after window.location.href,
+    // as the browser navigates away. The authentication flow continues on your backend.
   };
 
   return (
@@ -164,24 +167,29 @@ const LoginPage = () => {
 
         <CardContent>
           <div className="space-y-4">
-            <div className={isLoading ? "pointer-events-none opacity-60" : ""}>
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() =>
-                  toast({
-                    title: "Google login failed",
-                    description: "Please try again.",
-                    variant: "destructive",
-                  })
-                }
-                useOneTap
-                shape="rectangular"
-                theme="outline"
-                locale="en"
-                size="large"
-                width="320"
-              />
-            </div>
+            {/* Replaced GoogleLogin component with a regular button that triggers redirect */}
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out transform hover:-translate-y-0.5 flex items-center justify-center"
+              onClick={handleGoogleLoginRedirect}
+              disabled={isLoading} // Disable while any login process is ongoing
+            >
+              {isLoading ? ( // Show spinner only if isLoading is true AND it's for Google login
+                <div className="flex items-center space-x-2">
+                  <div className="h-4 w-4 border-2 border-r-transparent border-white rounded-full animate-spin" />
+                  <span>Redirecting to Google...</span>
+                </div>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-2" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.75 1.22 9.24 3.23l6.53-6.53C34.62 3.82 29.38 1.5 24 1.5 15.5 1.5 8.24 6.94 4.5 14.5l6.51 5.02C12.16 13.91 17.5 9.5 24 9.5z"></path>
+                    <path fill="#4285F4" d="M46.7 24.5c0-1.57-.15-3.09-.43-4.59H24v8.58h12.43c-.77 4.09-3.08 7.45-6.19 9.68l6.19 4.79c3.67-3.4 6.13-8.52 6.13-14.71z"></path>
+                    <path fill="#FBBC04" d="M12.16 32.74c-.67-2.09-1.07-4.39-1.07-6.74s.4-4.65 1.07-6.74l-6.51-5.02C4.3 18.06 1.5 20.81 1.5 24.5s2.8 6.44 6.09 9.92l6.57-5.04z"></path>
+                    <path fill="#34A853" d="M24 47.5c6.54 0 12.06-2.14 16.08-5.83l-6.19-4.79c-2.92 1.93-6.69 3.12-9.89 3.12-6.5 0-11.84-4.41-14.5-10.91l-6.57 5.04c3.76 7.57 11.02 13.01 19.57 13.01z"></path>
+                  </svg>
+                  Sign in with Google
+                </>
+              )}
+            </Button>
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">

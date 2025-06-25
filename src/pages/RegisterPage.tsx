@@ -9,31 +9,38 @@ import { Label } from '@/components/ui/label';
 import { Eye, EyeOff } from 'lucide-react'; // For show/hide password icon
 
 // Define your Google OAuth constants
-// !!! IMPORTANT: Replace these with your actual Client ID and Redirect URI from Google Cloud Console !!!
+// These are now primarily for reference/understanding, as Spring Security handles their usage on the backend.
+// You still need VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_REDIRECT_URI set in your frontend's .env for this
+// component's original design, though the direct use for URL construction is removed for Google login.
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID; // Your actual Google Client ID
 const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI ; // Your backend endpoint to handle Google redirect
 const GOOGLE_SCOPE = 'email profile'; // Scopes you are requesting
 const GOOGLE_RESPONSE_TYPE = 'code'; // Requesting an authorization code (PKCE flow)
 
 // For generating unique state parameter (recommended for CSRF protection)
-// You might need to install 'uuid': npm install uuid
+// While not directly used in the frontend's redirect to /oauth2/authorization,
+// you might still use 'uuid' for other purposes or if a state parameter is
+// later needed for other client-side OAuth flows.
 import { v4 as uuidv4 } from 'uuid';
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate(); // Initialize navigate hook
-  const { register, isAuthenticated } = useAuthStore(); // Removed loginWithGoogle from destructuring as it's not directly called here for initiation
+  const { register, isAuthenticated } = useAuthStore();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // New state for confirm password
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false); // State for password visibility
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // New state for confirm password visibility
 
   // State for client-side validation errors
   const [nameError, setNameError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null); // New error state
 
   // Client-side validation logic
   const validateForm = () => {
@@ -41,6 +48,7 @@ const RegisterPage: React.FC = () => {
     setNameError(null);
     setEmailError(null);
     setPasswordError(null);
+    setConfirmPasswordError(null); // Clear confirm password error
 
     if (!name.trim()) {
       setNameError('Name is required.');
@@ -50,7 +58,7 @@ const RegisterPage: React.FC = () => {
     if (!email.trim()) {
       setEmailError('Email is required.');
       isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) { // Basic email regex
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
       setEmailError('Invalid email format.');
       isValid = false;
     }
@@ -58,8 +66,17 @@ const RegisterPage: React.FC = () => {
     if (!password) {
       setPasswordError('Password is required.');
       isValid = false;
-    } else if (password.length < 6) { // Minimum password length
+    } else if (password.length < 6) {
       setPasswordError('Password must be at least 6 characters long.');
+      isValid = false;
+    }
+
+    // New validation for confirm password
+    if (!confirmPassword) {
+      setConfirmPasswordError('Confirm Password is required.');
+      isValid = false;
+    } else if (password !== confirmPassword) {
+      setConfirmPasswordError('Passwords do not match.');
       isValid = false;
     }
 
@@ -73,7 +90,7 @@ const RegisterPage: React.FC = () => {
     if (/[A-Z]/.test(pwd)) strength++;
     if (/[a-z]/.test(pwd)) strength++;
     if (/[0-9]/.test(pwd)) strength++;
-    if (/[^A-Za-z0-9]/.test(pwd)) strength++; // Special characters
+    if (/[^A-Za-z0-9]/.test(pwd)) strength++;
 
     if (strength < 3) return { text: 'Weak', color: 'text-red-500' };
     if (strength < 5) return { text: 'Medium', color: 'text-yellow-500' };
@@ -85,7 +102,7 @@ const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
-      return; // Stop if client-side validation fails
+      return;
     }
 
     setError(null);
@@ -106,29 +123,14 @@ const RegisterPage: React.FC = () => {
 
   const handleGoogleLogin = () => {
     setError(null);
-    // Setting loading state here is debatable as the browser is redirecting away,
-    // but it can provide immediate visual feedback before redirect.
     setLoading(true);
 
-    // Generate a random state parameter for CSRF protection
-    const state = uuidv4();
-    // Store the state in local storage to verify it upon return from Google
-    localStorage.setItem('oauth_state', state);
-
-    const params = new URLSearchParams({
-      response_type: GOOGLE_RESPONSE_TYPE,
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GOOGLE_SCOPE,
-      redirect_uri: GOOGLE_REDIRECT_URI,
-      state: state,
-      // Optional: 'prompt=select_account' can be added to force account selection
-      // Optional: 'access_type=offline' for obtaining a refresh token (requires proper backend handling)
-    });
-
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-
-    // Redirect the user's browser to Google's authentication page
-    window.location.href = googleAuthUrl;
+    // IMPORTANT CHANGE:
+    // Instead of constructing the Google OAuth URL directly,
+    // redirect to your Spring Boot backend's Spring Security OAuth2 authorization endpoint.
+    // Spring Security will then handle the redirect to Google, the callback, and token exchange.
+    const backendBaseUrl = 'https://personal-portfolio-29nl.onrender.com'; // Replace with your actual backend base URL
+    window.location.href = `${backendBaseUrl}/oauth2/authorization/google`;
 
     // Note: The execution of JavaScript on this page stops after window.location.href,
     // as the browser navigates away. The authentication flow continues on your backend.
@@ -138,6 +140,18 @@ const RegisterPage: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard');
+    }
+    // Also, handle the JWT token returned from Google OAuth success on the backend
+    // This part should ideally be in a separate component/logic that runs when /dashboard loads
+    // or when the app initializes, checking for a 'token' query parameter.
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+      // Assuming your useAuthStore has a way to set the authenticated state with a token
+      // For example, if it has a loginSuccess action that takes a token:
+      // useAuthStore.getState().loginSuccess(token);
+      // After processing, clean the URL to remove the token for security and aesthetics
+      navigate('/dashboard', { replace: true }); // Replace current history entry
     }
   }, [isAuthenticated, navigate]);
 
@@ -201,12 +215,38 @@ const RegisterPage: React.FC = () => {
               </button>
             </div>
             {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
-            {password && !passwordError && ( // Show strength only if password is typed and no error
+            {password && !passwordError && (
               <p className={`text-xs mt-1 ${passwordStrength.color}`}>
                 Password Strength: {passwordStrength.text}
               </p>
             )}
           </div>
+
+          {/* Confirm Password Field */}
+          <div>
+            <Label htmlFor="confirm-password" className="text-sm font-medium text-gray-700">Confirm Password</Label>
+            <div className="relative mt-1">
+              <Input
+                id="confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setConfirmPasswordError(null); }}
+                placeholder="Confirm Password"
+                required
+                className={`block w-full rounded-md border ${confirmPasswordError ? 'border-red-500' : 'border-gray-300'} focus:ring-blue-500 focus:border-blue-500 shadow-sm pr-10 p-2`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            {confirmPasswordError && <p className="text-red-500 text-xs mt-1">{confirmPasswordError}</p>}
+          </div>
+
           <Button
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out transform hover:-translate-y-0.5"
