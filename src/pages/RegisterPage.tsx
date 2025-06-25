@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate for redirection
-import useAuthStore from '@/store/useAuthStore'; // Adjust this path if your useAuthStore is elsewhere
+// FIXED: Corrected import to use named import {} for useAuthStore
+import { useAuthStore } from '@/store/useAuthStore'; // This should fix the "default" export error
 import { Button } from '@/components/ui/button'; // Example UI components (adjust paths as needed)
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff } from 'lucide-react'; // For show/hide password icon
+import { Eye, EyeOff } from 'lucide-react';
+// For show/hide password icon
+
 
 // Define your Google OAuth constants
 // These are now primarily for reference/understanding, as Spring Security handles their usage on the backend.
@@ -149,7 +152,8 @@ const RegisterPage: React.FC = () => {
     if (token) {
       // Assuming your useAuthStore has a way to set the authenticated state with a token
       // For example, if it has a loginSuccess action that takes a token:
-      // useAuthStore.getState().loginSuccess(token);
+      // useAuthStore.getState().setToken(token);
+      // useAuthStore.getState().setAuthenticated(true);
       // After processing, clean the URL to remove the token for security and aesthetics
       navigate('/dashboard', { replace: true }); // Replace current history entry
     }
